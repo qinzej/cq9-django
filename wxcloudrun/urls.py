@@ -14,13 +14,19 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
-from wxcloudrun import views
-from django.conf.urls import url
+from django.urls import path
+from django.contrib import admin
+from . import views
+from . import miniprogram_views
 
-urlpatterns = (
-    # 计数器接口
-    url(r'^^api/count(/)?$', views.counter),
-
+urlpatterns = [
     # 获取主页
-    url(r'(/)?$', views.index),
-)
+    path('', views.index, name='index'),
+    # 管理员界面
+    path('admin/', admin.site.urls),
+    # 登录页面
+    path('login/', views.login, name='login'),
+    # 小程序接口
+    path('api/parent/login/', miniprogram_views.parent_login, name='parent_login'),
+    path('api/coach/login/', miniprogram_views.coach_login, name='coach_login'),
+]

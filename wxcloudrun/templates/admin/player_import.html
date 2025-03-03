@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main">
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <fieldset class="module aligned">
+            <div class="form-row">
+                <div>
+                    <label for="excel_file">选择Excel文件：</label>
+                    <input type="file" name="excel_file" id="excel_file" accept=".xlsx,.xls" required>
+                </div>
+            </div>
+        </fieldset>
+        <div class="submit-row">
+            <input type="submit" value="导入" class="default">
+        </div>
+    </form>
+    <div class="help">
+        <p>Excel文件格式要求：</p>
+        <ul>
+            <li>必须包含以下列：队员姓名、学校、入学年份、家长姓名、家长电话</li>
+            <li>可选列：备注</li>
+            <li>第一行必须是列标题</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
