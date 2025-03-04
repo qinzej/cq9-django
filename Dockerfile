@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 先复制 requirements.txt
+# 复制 requirements.txt 并设置工作目录
 COPY requirements.txt /app/
 WORKDIR /app
 
@@ -36,9 +36,9 @@ RUN mkdir -p staticfiles && \
 COPY ./docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
 
-# 添加健康检查
+# 修改 HEALTHCHECK 检测根路径，避免 /admin/ 可能因认证等问题失败
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:80/admin/ || exit 1
+  CMD curl -f http://localhost:80/ || exit 1
 
 EXPOSE 80
 
