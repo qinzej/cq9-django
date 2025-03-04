@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     default-libmysqlclient-dev \
     netcat-openbsd \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 先复制 requirements.txt
@@ -34,6 +35,10 @@ RUN mkdir -p staticfiles && \
 # 添加数据库迁移脚本
 COPY ./docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
+
+# 添加健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:80/admin/ || exit 1
 
 EXPOSE 80
 

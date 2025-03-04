@@ -34,13 +34,22 @@ python3 manage.py collectstatic --noinput || {
     exit 1
 }
 
+# 添加启动延迟
+echo "Waiting for 5 seconds before starting Gunicorn..."
+sleep 5
+
 # 启动 Gunicorn
 echo "Starting Gunicorn..."
 exec gunicorn \
     --bind 0.0.0.0:80 \
     --workers 4 \
     --timeout 120 \
+    --graceful-timeout 30 \
+    --keep-alive 5 \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
     --access-logfile - \
     --error-logfile - \
     --log-level info \
+    --capture-output \
     wxcloudrun.wsgi:application
