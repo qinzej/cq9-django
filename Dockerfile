@@ -6,6 +6,9 @@ FROM alpine:3.13
 # 设置时区
 RUN apk add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo Asia/Shanghai > /etc/timezone
 
+# 使用腾讯云镜像源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.cloud.tencent.com/g' /etc/apk/repositories
+
 # 安装系统依赖
 RUN apk add --update --no-cache \
     python3 \
@@ -21,16 +24,19 @@ RUN apk add --update --no-cache \
     netcat-openbsd \
     && rm -rf /var/cache/apk/*
 
-# 拷贝当前项目到/app目录下(.dockerignore中文件除外)
-COPY . /app
+# 先复制 requirements.txt
+COPY requirements.txt /app/
 WORKDIR /app
 
-# 安装 Python 依赖
-RUN pip config set global.index-url http://mirrors.cloud.tencent.com/pypi/simple \
+# 配置 pip 并安装依赖
+RUN pip config set global.index-url https://mirrors.cloud.tencent.com/pypi/simple/ \
     && pip config set global.trusted-host mirrors.cloud.tencent.com \
     && pip install --upgrade pip \
-    && pip install --user -r requirements.txt \
-    && pip install gunicorn
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir gunicorn
+
+# 复制项目文件
+COPY . /app
 
 # 创建静态文件目录并收集静态文件
 RUN mkdir -p staticfiles && \
@@ -42,5 +48,4 @@ RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
 
-# 使用入口脚本替代直接运行
 ENTRYPOINT ["/docker-entrypoint.sh"]
