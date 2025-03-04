@@ -18,6 +18,7 @@ RUN apk add --update --no-cache \
     zlib-dev \
     libffi-dev \
     ca-certificates \
+    netcat-openbsd \
     && rm -rf /var/cache/apk/*
 
 # 拷贝当前项目到/app目录下(.dockerignore中文件除外)
@@ -35,7 +36,11 @@ RUN pip config set global.index-url http://mirrors.cloud.tencent.com/pypi/simple
 RUN mkdir -p staticfiles && \
     python3 manage.py collectstatic --noinput
 
+# 添加数据库迁移脚本
+COPY ./docker-entrypoint.sh /
+RUN chmod +x /docker-entrypoint.sh
+
 EXPOSE 80
 
-# 使用 gunicorn 替代 runserver
-CMD ["gunicorn", "--bind", "0.0.0.0:80", "--workers", "4", "wxcloudrun.wsgi:application"]
+# 使用入口脚本替代直接运行
+ENTRYPOINT ["/docker-entrypoint.sh"]
