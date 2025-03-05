@@ -37,7 +37,7 @@ COPY ./docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
 
 # 修改 HEALTHCHECK 使用专门的健康检查端点
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=5 \
   CMD curl -f http://localhost:80/health/ || exit 1
 
 EXPOSE 80
