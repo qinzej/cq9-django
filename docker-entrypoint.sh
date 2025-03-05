@@ -34,13 +34,13 @@ python3 manage.py collectstatic --noinput || {
     exit 1
 }
 
-# 可选：添加启动延迟，若需要等待其它依赖启动
+# 添加启动延迟
 echo "Waiting for 10 seconds before starting Gunicorn..."
 sleep 10
 
-# 启动 Gunicorn（直接 exec，使其成为主进程）
+# 启动 Gunicorn
 echo "Starting Gunicorn..."
-exec gunicorn \
+gunicorn \
     --bind 0.0.0.0:80 \
     --workers 4 \
     --timeout 120 \
@@ -53,4 +53,20 @@ exec gunicorn \
     --log-level debug \
     --capture-output \
     --preload \
-    wxcloudrun.wsgi:application
+    wxcloudrun.wsgi:application &
+
+# 等待 Gunicorn 启动
+echo "Waiting for Gunicorn to start..."
+for i in $(seq 1 30); do
+    if curl -s http://localhost:80 >/dev/null; then
+        echo "Gunicorn is up and running"
+        # 保持容器运行
+        tail -f /dev/null
+        exit 0
+    fi
+    echo "Waiting for Gunicorn... attempt $i/30"
+    sleep 2
+done
+
+echo "Gunicorn failed to start"
+exit 1
