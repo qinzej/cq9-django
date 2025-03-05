@@ -54,8 +54,8 @@ def parent_login(request):
         players = [{
             'id': player.id,
             'name': player.name,
-            'school': player.school,
-            'enrollment_year': player.enrollment_year
+            'school': player.school.name,
+            'enrollment_year': player.enrollment_year.year
         } for player in parent.players.all()]
 
         # 登录成功，返回家长信息和token
