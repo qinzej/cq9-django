@@ -18,7 +18,7 @@ python3 manage.py collectstatic --noinput || {
 echo "启动Gunicorn..."
 exec gunicorn \
     --bind 0.0.0.0:80 \
-    --workers 2 \
+    --workers 1 \
     --timeout 120 \
     --graceful-timeout 30 \
     --keep-alive 5 \
