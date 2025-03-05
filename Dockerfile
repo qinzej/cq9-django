@@ -20,11 +20,12 @@ COPY requirements.txt /app/
 WORKDIR /app
 
 # 配置 pip 并安装依赖
+# 安装 Python 依赖（添加 whitenoise）
 RUN pip config set global.index-url https://mirrors.cloud.tencent.com/pypi/simple/ \
     && pip config set global.trusted-host mirrors.cloud.tencent.com \
     && pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir gunicorn
+    && pip install --no-cache-dir gunicorn whitenoise  # 新增 whitenoise
 
 # 复制项目文件
 COPY . /app
