@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     default-libmysqlclient-dev \
     netcat-openbsd \
     curl \
+    iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制 requirements.txt 并设置工作目录
