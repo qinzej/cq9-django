@@ -36,9 +36,9 @@ RUN mkdir -p staticfiles && \
 COPY ./docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
 
-# 修改 HEALTHCHECK 检测根路径，避免 /admin/ 可能因认证等问题失败
-HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:80/ || exit 1
+# 修改 HEALTHCHECK 使用专门的健康检查端点
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:80/health/ || exit 1
 
 EXPOSE 80
 
