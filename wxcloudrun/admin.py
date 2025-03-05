@@ -7,7 +7,7 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django import forms
 import pandas as pd
-from .models import Coach, Parent, Player, School, EnrollmentYear, Team, Task, TaskCompletion, AchievementLevel, PersonalAchievement, PlayerAchievement, TeamAchievement, Assessment, AssessmentItem, AssessmentScore, TeamResult
+from .models import Coach, Parent, Player, School, EnrollmentYear, Team, Task, TaskCompletion, AchievementCategory, PersonalAchievement, PlayerAchievement, TeamAchievement, Assessment, AssessmentItem, AssessmentScore, TeamResult
 
 # 设置管理后台标题
 admin.site.site_header = '超群九人后台管理'
@@ -371,11 +371,22 @@ class TaskCompletionAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
 
-@admin.register(AchievementLevel)
-class AchievementLevelAdmin(admin.ModelAdmin):
+@admin.register(AchievementCategory)
+class AchievementCategoryAdmin(admin.ModelAdmin):
     list_display = ['name', 'order']
+    list_display_links = ['name']
     ordering = ['order']
     search_fields = ['name']
+    readonly_fields = ['created_at', 'updated_at']
+    fieldsets = [
+        ('基本信息', {
+            'fields': ['name', 'description', 'icon', 'order']
+        }),
+        ('时间信息', {
+            'fields': ['created_at', 'updated_at'],
+            'classes': ['collapse']
+        })
+    ]
 
     def has_view_permission(self, request, obj=None):
         return request.user.is_superuser or request.user.is_staff
@@ -391,8 +402,8 @@ class AchievementLevelAdmin(admin.ModelAdmin):
 
 @admin.register(PersonalAchievement)
 class PersonalAchievementAdmin(admin.ModelAdmin):
-    list_display = ['name', 'level', 'achievement_type']
-    list_filter = ['level', 'achievement_type']
+    list_display = ['name', 'category', 'achievement_type']
+    list_filter = ['category', 'achievement_type']
     search_fields = ['name']
 
     def has_view_permission(self, request, obj=None):

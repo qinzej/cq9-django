@@ -179,9 +179,10 @@ class TaskCompletion(models.Model):
         unique_together = ['task', 'player', 'completion_date']
 
 # 成就管理模块
-class AchievementLevel(models.Model):
-    name = models.CharField(max_length=50, verbose_name='等级名称')
-    description = models.TextField(blank=True, verbose_name='等级描述')
+class AchievementCategory(models.Model):
+    name = models.CharField(max_length=50, verbose_name='类别名称')
+    description = models.TextField(blank=True, verbose_name='类别描述')
+    icon = models.ImageField(upload_to='achievement_icons/', blank=True, null=True, verbose_name='类别图标')
     order = models.IntegerField(default=0, verbose_name='排序')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -190,9 +191,9 @@ class AchievementLevel(models.Model):
         return self.name
 
     class Meta:
-        db_table = 'achievement_level'
-        verbose_name = '成就等级'
-        verbose_name_plural = '成就等级'
+        verbose_name = '成就类别'
+        verbose_name_plural = '成就类别'
+        db_table = 'achievement_category'
         ordering = ['order']
 
 class PersonalAchievement(models.Model):
@@ -203,7 +204,7 @@ class PersonalAchievement(models.Model):
     )
     name = models.CharField(max_length=100, verbose_name='成就名称')
     description = models.TextField(blank=True, verbose_name='成就描述')
-    level = models.ForeignKey(AchievementLevel, on_delete=models.PROTECT, verbose_name='成就等级')
+    category = models.ForeignKey(AchievementCategory, on_delete=models.PROTECT, verbose_name='成就类别', null=True, blank=True)
     achievement_type = models.CharField(max_length=20, choices=ACHIEVEMENT_TYPE_CHOICES, default='manual', verbose_name='获取方式')
     task = models.ForeignKey(Task, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='关联任务')
     task_count = models.IntegerField(default=0, verbose_name='任务完成次数要求')

@@ -66,9 +66,9 @@ SIMPLEUI_CONFIG = {
         'icon': 'fas fa-trophy',
         'models': [
             {
-                'name': '成就等级',
+                'name': '成就类别',
                 'icon': 'fas fa-star',
-                'url': 'wxcloudrun/achievementlevel/'
+                'url': 'wxcloudrun/achievementcategory/'
             },
             {
                 'name': '个人成就',
@@ -336,6 +336,8 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+APPEND_SLASH = False
 
 # 配置 WhiteNoise 压缩和缓存
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
