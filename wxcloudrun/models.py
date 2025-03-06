@@ -69,6 +69,7 @@ class Player(models.Model):
     school = models.ForeignKey(School, on_delete=models.PROTECT, verbose_name='所在学校')
     enrollment_year = models.ForeignKey(EnrollmentYear, on_delete=models.PROTECT, verbose_name='入学年份')
     notes = models.TextField(blank=True, verbose_name='备注')
+    avatar = models.URLField(max_length=500, blank=True, null=True, verbose_name='头像URL')
     parents = models.ManyToManyField(Parent, related_name='players', verbose_name='家长')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

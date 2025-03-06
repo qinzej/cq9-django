@@ -2,7 +2,7 @@ from django.http import JsonResponse
 from django.contrib.auth import authenticate
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
-from .models import Parent, Coach
+from .models import Parent, Coach, School, EnrollmentYear
 import json
 import jwt
 from datetime import datetime, timedelta
@@ -79,6 +79,285 @@ def parent_register(request):
                 }
             }
         })
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'code': 400,
+            'message': '无效的请求数据格式'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'code': 500,
+            'message': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_schools(request):
+    try:
+        schools = School.objects.all()
+        school_list = [{
+            'id': school.id,
+            'name': school.name
+        } for school in schools]
+
+        return JsonResponse({
+            'code': 200,
+            'message': '获取成功',
+            'data': school_list
+        })
+    except Exception as e:
+        return JsonResponse({
+            'code': 500,
+            'message': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_enrollment_years(request):
+    try:
+        years = EnrollmentYear.objects.all()
+        year_list = [{
+            'id': year.id,
+            'year': year.year
+        } for year in years]
+
+        return JsonResponse({
+            'code': 200,
+            'message': '获取成功',
+            'data': year_list
+        })
+    except Exception as e:
+        return JsonResponse({
+            'code': 500,
+            'message': str(e)
+        }, status=500)
+
+def search_players(request):
+    try:
+        # 验证token
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return JsonResponse({
+                'code': 401,
+                'message': '未登录'
+            }, status=401)
+
+        # 解析token
+        try:
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
+            if payload.get('type') != 'parent':
+                raise jwt.InvalidTokenError
+        except jwt.InvalidTokenError:
+            return JsonResponse({
+                'code': 401,
+                'message': '无效的token'
+            }, status=401)
+
+        # 获取请求数据
+        data = json.loads(request.body)
+        name = data.get('name')
+
+        if not name:
+            return JsonResponse({
+                'code': 400,
+                'message': '请输入队员姓名'
+            }, status=400)
+
+        # 查询队员
+        players = Player.objects.filter(name__icontains=name)
+        
+        # 转换为JSON格式
+        players_data = [{
+            'id': player.id,
+            'name': player.name,
+            'school': player.school.name,
+            'enrollment_year': player.enrollment_year.year
+        } for player in players]
+
+        return JsonResponse({
+            'code': 200,
+            'message': '查询成功',
+            'data': players_data
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'code': 400,
+            'message': '无效的请求数据格式'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'code': 500,
+            'message': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def unbind_player(request):
+    try:
+        # 验证token
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return JsonResponse({
+                'code': 401,
+                'message': '未登录'
+            }, status=401)
+
+        # 解析token
+        try:
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
+            if payload.get('type') != 'parent':
+                raise jwt.InvalidTokenError
+            parent_id = payload.get('id')
+        except jwt.InvalidTokenError:
+            return JsonResponse({
+                'code': 401,
+                'message': '无效的token'
+            }, status=401)
+
+        # 获取请求数据
+        data = json.loads(request.body)
+        player_id = data.get('player_id')
+
+        if not player_id:
+            return JsonResponse({
+                'code': 400,
+                'message': '请选择要解绑的队员'
+            }, status=400)
+
+        try:
+            # 获取家长和队员
+            parent = Parent.objects.get(id=parent_id)
+            player = Player.objects.get(id=player_id)
+
+            # 检查队员是否属于当前家长
+            if player.parent_id != parent_id:
+                return JsonResponse({
+                    'code': 403,
+                    'message': '无权解绑该队员'
+                }, status=403)
+
+            # 解绑队员
+            player.parent = None
+            player.save()
+
+            # 获取更新后的家长信息
+            players = [{
+                'id': p.id,
+                'name': p.name,
+                'school': p.school.name,
+                'enrollment_year': p.enrollment_year.year
+            } for p in parent.players.all()]
+
+            return JsonResponse({
+                'code': 200,
+                'message': '解绑成功',
+                'data': {
+                    'players': players
+                }
+            })
+
+        except Parent.DoesNotExist:
+            return JsonResponse({
+                'code': 404,
+                'message': '家长不存在'
+            }, status=404)
+        except Player.DoesNotExist:
+            return JsonResponse({
+                'code': 404,
+                'message': '队员不存在'
+            }, status=404)
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'code': 400,
+            'message': '无效的请求数据格式'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'code': 500,
+            'message': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def bind_player(request):
+    try:
+        # 验证token
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return JsonResponse({
+                'code': 401,
+                'message': '未登录'
+            }, status=401)
+
+        # 解析token
+        try:
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
+            if payload.get('type') != 'parent':
+                raise jwt.InvalidTokenError
+            parent_id = payload.get('id')
+        except jwt.InvalidTokenError:
+            return JsonResponse({
+                'code': 401,
+                'message': '无效的token'
+            }, status=401)
+
+        # 获取请求数据
+        data = json.loads(request.body)
+        player_id = data.get('player_id')
+
+        if not player_id:
+            return JsonResponse({
+                'code': 400,
+                'message': '请选择要绑定的队员'
+            }, status=400)
+
+        try:
+            # 获取家长和队员
+            parent = Parent.objects.get(id=parent_id)
+            player = Player.objects.get(id=player_id)
+
+            # 检查队员是否已经被绑定
+            if player.parent:
+                return JsonResponse({
+                    'code': 400,
+                    'message': '该队员已被其他家长绑定'
+                }, status=400)
+
+            # 绑定队员
+            player.parent = parent
+            player.save()
+
+            # 获取更新后的家长信息
+            players = [{
+                'id': p.id,
+                'name': p.name,
+                'school': p.school.name,
+                'enrollment_year': p.enrollment_year.year
+            } for p in parent.players.all()]
+
+            return JsonResponse({
+                'code': 200,
+                'message': '绑定成功',
+                'data': {
+                    'players': players
+                }
+            })
+
+        except Parent.DoesNotExist:
+            return JsonResponse({
+                'code': 404,
+                'message': '家长不存在'
+            }, status=404)
+        except Player.DoesNotExist:
+            return JsonResponse({
+                'code': 404,
+                'message': '队员不存在'
+            }, status=404)
 
     except json.JSONDecodeError:
         return JsonResponse({
@@ -271,3 +550,100 @@ def parent_dashboard(request):
 
     except Exception as e:
         return JsonResponse({'code': 500, 'message': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def add_player(request):
+    try:
+        # 验证token
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return JsonResponse({
+                'code': 401,
+                'message': '未登录'
+            }, status=401)
+
+        # 解析token
+        try:
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
+            if payload.get('type') != 'parent':
+                raise jwt.InvalidTokenError
+            parent_id = payload.get('id')
+        except jwt.InvalidTokenError:
+            return JsonResponse({
+                'code': 401,
+                'message': '无效的token'
+            }, status=401)
+
+        # 获取请求数据
+        data = json.loads(request.body)
+        name = data.get('name')
+        school_id = data.get('school_id')
+        enrollment_year_id = data.get('enrollment_year_id')
+        avatar = data.get('avatar')  # 头像URL是可选的
+
+        # 验证必填字段
+        if not name or not school_id or not enrollment_year_id:
+            return JsonResponse({
+                'code': 400,
+                'message': '请填写完整的队员信息'
+            }, status=400)
+
+        try:
+            # 获取家长、学校和入学年份
+            parent = Parent.objects.get(id=parent_id)
+            school = School.objects.get(id=school_id)
+            enrollment_year = EnrollmentYear.objects.get(id=enrollment_year_id)
+
+            # 检查是否已存在相同信息的队员
+            existing_player = Player.objects.filter(
+                name=name,
+                school=school,
+                enrollment_year=enrollment_year
+            ).first()
+
+            if existing_player:
+                return JsonResponse({
+                    'code': 400,
+                    'message': '该队员信息已存在'
+                }, status=400)
+
+            # 创建新队员
+            player = Player.objects.create(
+                name=name,
+                school=school,
+                enrollment_year=enrollment_year,
+                avatar=avatar  # 保存头像URL
+            )
+
+            # 建立家长和队员的关联关系
+            player.parents.add(parent)
+
+            return JsonResponse({
+                'code': 200,
+                'message': '添加队员成功',
+                'data': {
+                    'id': player.id,
+                    'name': player.name,
+                    'school': player.school.name,
+                    'enrollment_year': player.enrollment_year.year,
+                    'avatar': player.avatar  # 返回头像URL
+                }
+            })
+
+        except (School.DoesNotExist, EnrollmentYear.DoesNotExist):
+            return JsonResponse({
+                'code': 400,
+                'message': '学校或入学年份不存在'
+            }, status=400)
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'code': 400,
+            'message': '无效的请求数据格式'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'code': 500,
+            'message': str(e)
+        }, status=500)

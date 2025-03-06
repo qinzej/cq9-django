@@ -30,4 +30,6 @@ urlpatterns = [
     path('api/parent/login/', miniprogram_views.parent_login, name='parent_login'),
     path('api/parent/register/', miniprogram_views.parent_register, name='parent_register'),
     path('api/coach/login/', miniprogram_views.coach_login, name='coach_login'),
+    path('api/schools/', miniprogram_views.get_schools, name='get_schools'),
+    path('api/enrollment-years/', miniprogram_views.get_enrollment_years, name='get_enrollment_years'),
 ]
