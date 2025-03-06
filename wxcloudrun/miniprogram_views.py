@@ -58,9 +58,26 @@ def parent_register(request):
             miniprogram_password=password
         )
 
+        # 生成token
+        token = generate_token(parent.id, 'parent')
+
+        # 获取关联的队员信息
+        players = []
+
+        # 返回注册成功信息，包含token和user_info
         return JsonResponse({
             'code': 200,
-            'message': '注册成功'
+            'message': '注册成功',
+            'data': {
+                'token': token,
+                'user_info': {
+                    'id': parent.id,
+                    'name': parent.name,
+                    'phone': parent.phone,
+                    'type': 'parent',
+                    'players': players
+                }
+            }
         })
 
     except json.JSONDecodeError:
