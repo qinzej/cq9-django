@@ -19,6 +19,63 @@ def generate_token(user_id, user_type):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def parent_register(request):
+    try:
+        data = json.loads(request.body)
+        phone = data.get('phone')
+        password = data.get('password')
+
+        if not phone or not password:
+            return JsonResponse({
+                'code': 400,
+                'message': '手机号和密码不能为空'
+            }, status=400)
+
+        # 验证手机号格式
+        if not phone.isdigit() or len(phone) != 11:
+            return JsonResponse({
+                'code': 400,
+                'message': '手机号格式不正确'
+            }, status=400)
+
+        # 验证密码长度
+        if len(password) < 6:
+            return JsonResponse({
+                'code': 400,
+                'message': '密码长度不能少于6位'
+            }, status=400)
+
+        # 检查手机号是否已注册
+        if Parent.objects.filter(phone=phone).exists():
+            return JsonResponse({
+                'code': 400,
+                'message': '该手机号已注册'
+            }, status=400)
+
+        # 创建新家长账号
+        parent = Parent.objects.create(
+            phone=phone,
+            miniprogram_password=password
+        )
+
+        return JsonResponse({
+            'code': 200,
+            'message': '注册成功'
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'code': 400,
+            'message': '无效的请求数据格式'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'code': 500,
+            'message': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def parent_login(request):
     try:
         data = json.loads(request.body)
@@ -151,3 +208,49 @@ def coach_login(request):
             'code': 500,
             'message': str(e)
         }, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def parent_dashboard(request):
+    try:
+        # 验证token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return JsonResponse({'code': 401, 'message': '未提供有效凭证'}, status=401)
+        
+        token = auth_header.split(' ')[1]
+        payload = verify_token(token)
+        if not payload or payload.get('type') != 'parent':
+            return JsonResponse({'code': 403, 'message': '无访问权限'}, status=403)
+
+        # 获取家长信息
+        parent = Parent.objects.get(id=payload['user_id'])
+        
+        # 获取关联队员的最新训练数据
+        players_data = []
+        for player in parent.players.all():
+            players_data.append({
+                'name': player.name,
+                'attendance': player.get_attendance_rate(),
+                'latest_skills': player.get_latest_skills(),
+                'next_session': player.get_next_session_info()
+            })
+
+        # 获取关联课程信息
+        courses = [{
+            'id': session.id,
+            'name': session.course.name,
+            'time': session.schedule,
+            'coach': session.coach.name
+        } for session in TrainingSession.objects.filter(players__in=parent.players.all()).distinct()]
+
+        return JsonResponse({
+            'code': 200,
+            'data': {
+                'child_progress': players_data,
+                'courses': courses
+            }
+        })
+
+    except Exception as e:
+        return JsonResponse({'code': 500, 'message': str(e)}, status=500)

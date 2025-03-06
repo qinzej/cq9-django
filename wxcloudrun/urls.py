@@ -28,5 +28,6 @@ urlpatterns = [
     path('login/', views.login, name='login'),
     # 小程序接口
     path('api/parent/login/', miniprogram_views.parent_login, name='parent_login'),
+    path('api/parent/register/', miniprogram_views.parent_register, name='parent_register'),
     path('api/coach/login/', miniprogram_views.coach_login, name='coach_login'),
 ]
