@@ -584,7 +584,7 @@ def add_player(request):
         name = data.get('name')
         school_id = data.get('school_id')
         enrollment_year_id = data.get('enrollment_year_id')
-        avatar = data.get('avatar')
+        avatar_url = data.get('avatar_url')  # 这里已经支持接收avatar_url
 
         # 验证必填字段
         if not name or not school_id or not enrollment_year_id:
@@ -617,7 +617,7 @@ def add_player(request):
                 name=name,
                 school=school,
                 enrollment_year=enrollment_year,
-                avatar=avatar,
+                avatar=avatar_url,  # 这里已经支持存储avatar_url
                 jersey_number=data.get('jersey_number')
             )
 
