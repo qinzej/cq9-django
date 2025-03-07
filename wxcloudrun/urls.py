@@ -32,4 +32,8 @@ urlpatterns = [
     path('api/coach/login/', miniprogram_views.coach_login, name='coach_login'),
     path('api/schools/', miniprogram_views.get_schools, name='get_schools'),
     path('api/enrollment-years/', miniprogram_views.get_enrollment_years, name='get_enrollment_years'),
+    path('api/parent/search_players/', miniprogram_views.search_players, name='search_players'),
+    path('api/parent/add_player/', miniprogram_views.add_player, name='add_player'),
+    path('api/parent/bind_player/', miniprogram_views.bind_player, name='bind_player'),
+    path('api/parent/unbind_player/', miniprogram_views.unbind_player, name='unbind_player'),
 ]

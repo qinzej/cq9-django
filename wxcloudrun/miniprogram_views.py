@@ -2,7 +2,7 @@ from django.http import JsonResponse
 from django.contrib.auth import authenticate
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
-from .models import Parent, Coach, School, EnrollmentYear
+from .models import Parent, Coach, School, EnrollmentYear, Player
 import json
 import jwt
 from datetime import datetime, timedelta
@@ -92,8 +92,6 @@ def parent_register(request):
         }, status=500)
 
 @csrf_exempt
-@require_http_methods(["POST"])
-@csrf_exempt
 @require_http_methods(["GET"])
 def get_schools(request):
     try:
@@ -147,8 +145,8 @@ def search_players(request):
 
         # 解析token
         try:
-            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
-            if payload.get('type') != 'parent':
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            if payload.get('user_type') != 'parent':
                 raise jwt.InvalidTokenError
         except jwt.InvalidTokenError:
             return JsonResponse({
@@ -157,8 +155,7 @@ def search_players(request):
             }, status=401)
 
         # 获取请求数据
-        data = json.loads(request.body)
-        name = data.get('name')
+        name = request.GET.get('name', '')
 
         if not name:
             return JsonResponse({
@@ -209,10 +206,10 @@ def unbind_player(request):
 
         # 解析token
         try:
-            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
-            if payload.get('type') != 'parent':
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            if payload.get('user_type') != 'parent':
                 raise jwt.InvalidTokenError
-            parent_id = payload.get('id')
+            parent_id = payload.get('user_id')
         except jwt.InvalidTokenError:
             return JsonResponse({
                 'code': 401,
@@ -235,15 +232,14 @@ def unbind_player(request):
             player = Player.objects.get(id=player_id)
 
             # 检查队员是否属于当前家长
-            if player.parent_id != parent_id:
+            if parent not in player.parents.all():
                 return JsonResponse({
                     'code': 403,
                     'message': '无权解绑该队员'
                 }, status=403)
 
             # 解绑队员
-            player.parent = None
-            player.save()
+            player.parents.remove(parent)
 
             # 获取更新后的家长信息
             players = [{
@@ -297,10 +293,10 @@ def bind_player(request):
 
         # 解析token
         try:
-            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
-            if payload.get('type') != 'parent':
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            if payload.get('user_type') != 'parent':
                 raise jwt.InvalidTokenError
-            parent_id = payload.get('id')
+            parent_id = payload.get('user_id')
         except jwt.InvalidTokenError:
             return JsonResponse({
                 'code': 401,
@@ -323,15 +319,14 @@ def bind_player(request):
             player = Player.objects.get(id=player_id)
 
             # 检查队员是否已经被绑定
-            if player.parent:
+            if player.parents.exists():
                 return JsonResponse({
                     'code': 400,
                     'message': '该队员已被其他家长绑定'
                 }, status=400)
 
             # 绑定队员
-            player.parent = parent
-            player.save()
+            player.parents.add(parent)
 
             # 获取更新后的家长信息
             players = [{
@@ -508,7 +503,7 @@ def coach_login(request):
         }, status=500)
 
 @csrf_exempt
-@require_http_methods(["GET"])
+@require_http_methods(["POST"])
 def parent_dashboard(request):
     try:
         # 验证token
@@ -567,10 +562,10 @@ def add_player(request):
 
         # 解析token
         try:
-            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
-            if payload.get('type') != 'parent':
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            if payload.get('user_type') != 'parent':
                 raise jwt.InvalidTokenError
-            parent_id = payload.get('id')
+            parent_id = payload.get('user_id')
         except jwt.InvalidTokenError:
             return JsonResponse({
                 'code': 401,
@@ -582,7 +577,7 @@ def add_player(request):
         name = data.get('name')
         school_id = data.get('school_id')
         enrollment_year_id = data.get('enrollment_year_id')
-        avatar = data.get('avatar')  # 头像URL是可选的
+        avatar = data.get('avatar')
 
         # 验证必填字段
         if not name or not school_id or not enrollment_year_id:
@@ -620,7 +615,8 @@ def add_player(request):
             )
 
             # 建立家长和队员的关联关系
-            player.parents.add(parent)
+            player.parent = parent
+            player.save()
 
             return JsonResponse({
                 'code': 200,
@@ -630,7 +626,7 @@ def add_player(request):
                     'name': player.name,
                     'school': player.school.name,
                     'enrollment_year': player.enrollment_year.year,
-                    'avatar': player.avatar  # 返回头像URL
+                    'avatar': player.avatar
                 }
             })
 
