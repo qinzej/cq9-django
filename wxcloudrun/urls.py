@@ -18,6 +18,7 @@ from django.urls import path
 from django.contrib import admin
 from . import views
 from . import miniprogram_views
+from . import auth_views
 
 urlpatterns = [
     # 获取主页
@@ -36,4 +37,5 @@ urlpatterns = [
     path('api/parent/add_player/', miniprogram_views.add_player, name='add_player'),
     path('api/parent/bind_player/', miniprogram_views.bind_player, name='bind_player'),
     path('api/parent/unbind_player/', miniprogram_views.unbind_player, name='unbind_player'),
+    path('api/auth/verify/', auth_views.verify_token, name='verify_token'),
 ]
