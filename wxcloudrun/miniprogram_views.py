@@ -174,7 +174,8 @@ def search_players(request):
             'id': player.id,
             'name': player.name,
             'school': player.school.name,
-            'enrollment_year': player.enrollment_year.year
+            'enrollment_year': player.enrollment_year.year,
+            'jersey_number': player.jersey_number
         } for player in players]
 
         return JsonResponse({
@@ -408,7 +409,8 @@ def parent_login(request):
             'id': player.id,
             'name': player.name,
             'school': player.school.name,
-            'enrollment_year': player.enrollment_year.year
+            'enrollment_year': player.enrollment_year.year,
+            'jersey_number': player.jersey_number
         } for player in parent.players.all()]
 
         # 登录成功，返回家长信息和token
@@ -613,7 +615,8 @@ def add_player(request):
                 name=name,
                 school=school,
                 enrollment_year=enrollment_year,
-                avatar=avatar  # 保存头像URL
+                avatar=avatar,
+                jersey_number=data.get('jersey_number')
             )
 
             # 建立家长和队员的关联关系

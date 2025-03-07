@@ -70,6 +70,7 @@ class Player(models.Model):
     enrollment_year = models.ForeignKey(EnrollmentYear, on_delete=models.PROTECT, verbose_name='入学年份')
     notes = models.TextField(blank=True, verbose_name='备注')
     avatar = models.URLField(max_length=500, blank=True, null=True, verbose_name='头像URL')
+    jersey_number = models.CharField(max_length=10, blank=True, null=True, verbose_name='背号')
     parents = models.ManyToManyField(Parent, related_name='players', verbose_name='家长')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
