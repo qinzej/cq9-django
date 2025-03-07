@@ -318,11 +318,18 @@ def bind_player(request):
             parent = Parent.objects.get(id=parent_id)
             player = Player.objects.get(id=player_id)
 
-            # 检查队员是否已经被绑定
-            if player.parents.exists():
+            # 检查家长已绑定的队员数量
+            if parent.players.count() >= 3:
                 return JsonResponse({
                     'code': 400,
-                    'message': '该队员已被其他家长绑定'
+                    'message': '每位家长最多只能绑定3个队员'
+                }, status=400)
+
+            # 检查队员已绑定的家长数量
+            if player.parents.count() >= 6:
+                return JsonResponse({
+                    'code': 400,
+                    'message': '每位队员最多可以被6位家长绑定'
                 }, status=400)
 
             # 绑定队员
