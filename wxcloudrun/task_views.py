@@ -166,6 +166,22 @@ def get_player_tasks(request):
             'active': is_active
         }
         
+        team_completions = []
+        first_team = relevant_teams.first()
+        if first_team:
+            for member in first_team.players.all():
+                completion_record = TaskCompletion.objects.filter(
+                    task=task,
+                    player=member,
+                    completion_date=today if task.period != 'once' else None
+                ).order_by('-completion_date').first()
+                teammate_status = completion_record.status if completion_record else 'incomplete'
+                team_completions.append({
+                    'player_id': member.id,
+                    'player_name': member.name,
+                    'status': teammate_status
+                })
+        task_data['team_completions'] = team_completions
         tasks_data.append(task_data)
     
     # 按照完成状态和截止日期排序
