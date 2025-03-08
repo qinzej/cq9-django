@@ -7,7 +7,7 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django import forms
 import pandas as pd
-from .models import Coach, Parent, Player, School, EnrollmentYear, Team, Task, TaskCompletion, AchievementCategory, PersonalAchievement, PlayerAchievement, TeamAchievement, Assessment, AssessmentItem, AssessmentScore, TeamResult
+from .models import Coach, Parent, Player, School, EnrollmentYear, Team, Task, TaskCompletion, Assessment, AssessmentItem, AssessmentScore, TeamResult
 
 # 设置管理后台标题
 admin.site.site_header = '超群九人后台管理'
@@ -105,16 +105,17 @@ class ParentAdmin(admin.ModelAdmin):
 
 @admin.register(Player)
 class PlayerAdmin(admin.ModelAdmin):
-    list_display = ['name', 'school', 'enrollment_year', 'grade', 'get_parents']
+    list_display = ['name', 'school', 'enrollment_year', 'grade', 'get_parent_names']
     list_filter = ['school', 'enrollment_year']
     search_fields = ['name', 'school']
     filter_horizontal = ['parents']
     fields = ['name', 'school', 'enrollment_year', 'notes', 'parents']
     change_list_template = 'admin/player_changelist.html'
 
-    def get_parents(self, obj):
-        return ', '.join([parent.name for parent in obj.parents.all()])
-    get_parents.short_description = '家长'
+    def get_parent_names(self, obj):
+        # 避免家长姓名为 None 的情况
+        return ', '.join([p.name if p.name else '未知姓名' for p in obj.parents.all()])
+    get_parent_names.short_description = '家长列表'
 
     def get_urls(self):
         urls = super().get_urls()
@@ -247,7 +248,7 @@ class CustomUserAdmin(UserAdmin):
         super().save_model(request, obj, form, change)
         # 检查用户是否属于教练组
         coach_group = Group.objects.get(name='教练')
-        if coach_group in obj.groups.all():
+        if (coach_group in obj.groups.all()):
             # 如果用户是教练，确保存在对应的Coach记录
             Coach.objects.get_or_create(
                 user=obj,
@@ -334,10 +335,9 @@ class TeamResultAdmin(admin.ModelAdmin):
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ['title', 'period', 'start_date', 'end_date', 'created_by']
-    list_filter = ['period', 'start_date', 'created_by']
+    list_display = ['title', 'start_date', 'end_date']
+    list_filter = ['start_date']
     search_fields = ['title', 'description']
-    filter_horizontal = ['teams']
 
     def has_view_permission(self, request, obj=None):
         return request.user.is_superuser or request.user.is_staff
@@ -355,92 +355,9 @@ class TaskAdmin(admin.ModelAdmin):
 
 @admin.register(TaskCompletion)
 class TaskCompletionAdmin(admin.ModelAdmin):
-    list_display = ['task', 'player', 'completion_date', 'verified', 'verified_by']
-    list_filter = ['completion_date', 'verified', 'task']
+    list_display = ['task', 'player', 'completion_date']
+    list_filter = ['completion_date', 'task']
     search_fields = ['task__title', 'player__name']
-
-    def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser or request.user.is_staff
-
-    def has_add_permission(self, request):
-        return request.user.is_superuser or request.user.is_staff
-
-    def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser or request.user.is_staff
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-@admin.register(AchievementCategory)
-class AchievementCategoryAdmin(admin.ModelAdmin):
-    list_display = ['name', 'order']
-    list_display_links = ['name']
-    ordering = ['order']
-    search_fields = ['name']
-    readonly_fields = ['created_at', 'updated_at']
-    fieldsets = [
-        ('基本信息', {
-            'fields': ['name', 'description', 'icon', 'order']
-        }),
-        ('时间信息', {
-            'fields': ['created_at', 'updated_at'],
-            'classes': ['collapse']
-        })
-    ]
-
-    def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser or request.user.is_staff
-
-    def has_add_permission(self, request):
-        return request.user.is_superuser
-
-    def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-@admin.register(PersonalAchievement)
-class PersonalAchievementAdmin(admin.ModelAdmin):
-    list_display = ['name', 'category', 'achievement_type']
-    list_filter = ['category', 'achievement_type']
-    search_fields = ['name']
-
-    def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser or request.user.is_staff
-
-    def has_add_permission(self, request):
-        return request.user.is_superuser
-
-    def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-@admin.register(PlayerAchievement)
-class PlayerAchievementAdmin(admin.ModelAdmin):
-    list_display = ['player', 'achievement', 'awarded_date', 'awarded_by']
-    list_filter = ['awarded_date', 'achievement']
-    search_fields = ['player__name', 'achievement__name']
-
-    def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser or request.user.is_staff
-
-    def has_add_permission(self, request):
-        return request.user.is_superuser or request.user.is_staff
-
-    def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser or request.user.is_staff
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-@admin.register(TeamAchievement)
-class TeamAchievementAdmin(admin.ModelAdmin):
-    list_display = ['team', 'name', 'competition_name', 'awarded_date', 'awarded_by']
-    list_filter = ['awarded_date', 'team']
-    search_fields = ['name', 'team__name', 'competition_name']
 
     def has_view_permission(self, request, obj=None):
         return request.user.is_superuser or request.user.is_staff
