@@ -71,6 +71,11 @@ SIMPLEUI_CONFIG = {
                 'url': 'wxcloudrun/achievementcategory/'
             },
             {
+                'name': '成就系列',
+                'icon': 'fas fa-layer-group',
+                'url': 'wxcloudrun/achievementseries/'
+            },
+            {
                 'name': '个人成就',
                 'icon': 'fas fa-medal',
                 'url': 'wxcloudrun/personalachievement/'
@@ -354,3 +359,16 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # JWT配置
 JWT_SECRET_KEY = SECRET_KEY
+
+# 添加成就系统相关配置
+ACHIEVEMENT_SETTINGS = {
+    'AUTO_CHECK_ENABLED': True,  # 开启自动检查成就
+    'AUTO_CHECK_INTERVAL': 60,   # 自动检查间隔（分钟）
+    'NOTIFICATION_ENABLED': True, # 开启成就解锁通知
+    'PROGRESS_TRACKING': True,   # 跟踪成就进度
+    'LEADERBOARD_SIZE': 50,      # 成就排行榜显示数量
+}
+
+# 指定成就徽章存储路径
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = '/media/'

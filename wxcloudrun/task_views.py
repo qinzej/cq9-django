@@ -54,7 +54,7 @@ def get_player_tasks(request):
     teams = player.teams.all()
     
     # 查询这些队伍的所有任务
-    tasks = Task.objects.filter(team__in=teams)
+    tasks = Task.objects.filter(teams__in=teams).distinct()  # 使用distinct避免重复
     
     # 应用状态筛选
     if status_filter:
@@ -76,7 +76,7 @@ def get_player_tasks(request):
         
         # 获取队员今天的完成情况(针对周期性任务)或整体完成情况(一次性任务)
         task_completion = None
-        if task.frequency == 'once':
+        if task.period == 'once':
             task_completion = TaskCompletion.objects.filter(
                 task=task, 
                 player=player
@@ -88,25 +88,29 @@ def get_player_tasks(request):
                 completion_date=today
             ).first()
         
-        # 获取团队进度
-        team_total = task.team.players.count()
-        if team_total == 0:
-            team_progress = 0
-        else:
-            if task.frequency == 'once':
-                completed_count = TaskCompletion.objects.filter(
-                    task=task, 
-                    status='completed'
+        # 获取团队进度 - 修改为处理多个队伍
+        team_total = 0
+        completed_count = 0
+        
+        # 获取与当前队员相关的队伍中的情况
+        relevant_teams = task.teams.filter(id__in=player.teams.values_list('id', flat=True))
+        for team in relevant_teams:
+            team_total += team.players.count()
+            if task.period == 'once':
+                completed_count += TaskCompletion.objects.filter(
+                    task=task,
+                    verified=True,
+                    player__in=team.players.all()
                 ).values('player').distinct().count()
             else:
-                # 今日完成人数
-                completed_count = TaskCompletion.objects.filter(
-                    task=task, 
-                    status='completed',
-                    completion_date=today
+                completed_count += TaskCompletion.objects.filter(
+                    task=task,
+                    verified=True,
+                    completion_date=today,
+                    player__in=team.players.all()
                 ).values('player').distinct().count()
-            
-            team_progress = round((completed_count / team_total) * 100)
+        
+        team_progress = round((completed_count / team_total) * 100) if team_total > 0 else 0
         
         # 获取任务连续完成天数
         streak = task.get_task_streak(player) if is_active else 0
@@ -116,23 +120,24 @@ def get_player_tasks(request):
             'id': task.id,
             'title': task.title,
             'description': task.description,
-            'frequency': task.frequency,
+            'period': task.period,  # 使用period替代frequency
             'start_date': task.start_date.strftime('%Y-%m-%d'),
             'end_date': task.end_date.strftime('%Y-%m-%d') if task.end_date else None,
             'points': task.points,
             'status': task.status,
             'require_proof': task.require_proof,
             'team_name': task.team.name,
+            'team_names': [team.name for team in task.teams.all()],  # 返回所有队伍名称
             'task_type': {
                 'name': task.task_type.name,
                 'icon': task.task_type.icon,
                 'color': task.task_type.color
             } if task.task_type else None,
             'player_completion': {
-                'status': task_completion.status if task_completion else 'incomplete',
+                'status': 'completed' if task_completion and task_completion.verified else 'pending' if task_completion else 'incomplete',
                 'completion_date': task_completion.completion_date.strftime('%Y-%m-%d') if task_completion else None,
-                'comment': task_completion.comment if task_completion else None,
-                'attachment': task_completion.attachment if task_completion else None
+                'comment': task_completion.notes if task_completion else None,
+                'attachment': task_completion.proof if task_completion else None
             },
             'team_progress': {
                 'percentage': team_progress,
@@ -214,11 +219,11 @@ def complete_task(request):
             }, status=403)
             
         # 检查是否已经完成过该任务
-        if task.frequency == 'once':
+        if task.period == 'once':
             existing_completion = TaskCompletion.objects.filter(
                 task=task,
                 player=player,
-                status='completed'
+                verified=True
             ).exists()
             
             if existing_completion:
@@ -232,7 +237,7 @@ def complete_task(request):
                 task=task,
                 player=player,
                 completion_date=today,
-                status='completed'
+                verified=True
             ).exists()
             
             if existing_completion:
@@ -262,15 +267,15 @@ def complete_task(request):
         # 获取团队完成情况
         team_total = task.team.players.count()
         if team_total > 0:
-            if task.frequency == 'once':
+            if task.period == 'once':
                 completed_count = TaskCompletion.objects.filter(
                     task=task, 
-                    status='completed'
+                    verified=True
                 ).values('player').distinct().count()
             else:
                 completed_count = TaskCompletion.objects.filter(
                     task=task, 
-                    status='completed',
+                    verified=True,
                     completion_date=today
                 ).values('player').distinct().count()
                 
@@ -344,7 +349,7 @@ def get_task_details(request):
     today = date.today()
     
     # 获取队员的完成情况
-    if task.frequency == 'once':
+    if task.period == 'once':
         player_completion = TaskCompletion.objects.filter(
             task=task, 
             player=player
@@ -368,7 +373,7 @@ def get_task_details(request):
     
     for member in team_members:
         # 获取完成记录
-        if task.frequency == 'once':
+        if task.period == 'once':
             completion = TaskCompletion.objects.filter(
                 task=task, 
                 player=member
@@ -404,7 +409,7 @@ def get_task_details(request):
         'id': task.id,
         'title': task.title,
         'description': task.description,
-        'frequency': task.frequency,
+        'period': task.period,  # 使用period替代frequency
         'start_date': task.start_date.strftime('%Y-%m-%d'),
         'end_date': task.end_date.strftime('%Y-%m-%d') if task.end_date else None,
         'points': task.points,
@@ -489,15 +494,15 @@ def get_team_task_stats(request):
         team_size = team.players.count()
         
         # 获取已完成人数
-        if task.frequency == 'once':
+        if task.period == 'once':
             completed_count = TaskCompletion.objects.filter(
                 task=task, 
-                status='completed'
+                verified=True
             ).values('player').distinct().count()
         else:
             completed_count = TaskCompletion.objects.filter(
                 task=task, 
-                status='completed',
+                verified=True,
                 completion_date=today
             ).values('player').distinct().count()
             
@@ -505,18 +510,18 @@ def get_team_task_stats(request):
         completion_rate = round((completed_count / team_size) * 100) if team_size > 0 else 0
         
         # 当前队员是否完成
-        if task.frequency == 'once':
+        if task.period == 'once':
             player_completed = TaskCompletion.objects.filter(
                 task=task, 
                 player=player,
-                status='completed'
+                verified=True
             ).exists()
         else:
             player_completed = TaskCompletion.objects.filter(
                 task=task, 
                 player=player,
                 completion_date=today,
-                status='completed'
+                verified=True
             ).exists()
         
         # 队员任务连续完成天数
@@ -543,7 +548,7 @@ def get_team_task_stats(request):
         task_stat = {
             'task_id': task.id,
             'title': task.title,
-            'frequency': task.frequency,
+            'period': task.period,  # 使用period替代frequency
             'task_type': {
                 'name': task.task_type.name,
                 'icon': task.task_type.icon,
@@ -692,3 +697,89 @@ def update_task_completion_status(request):
             'new_status': completion.status
         }
     })
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def assign_task_to_team(request):
+    """将任务分配给队伍"""
+    try:
+        # 解析请求数据
+        data = json.loads(request.body)
+        task_id = data.get('task_id')
+        team_id = data.get('team_id')
+        action = data.get('action', 'add')  # 新增参数: 'add'添加队伍, 'remove'移除队伍
+        
+        if not task_id or not team_id:
+            return JsonResponse({
+                'code': 400,
+                'message': '缺少必要参数'
+            }, status=400)
+        
+        # 验证token
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return JsonResponse({'code': 401, 'message': '未登录'}, status=401)
+        
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            # 这里可以添加权限检查，例如只允许教练分配任务
+            if payload.get('user_type') != 'coach':
+                return JsonResponse({'code': 403, 'message': '无权分配任务'}, status=403)
+            
+            coach_id = payload.get('user_id')
+            coach = Coach.objects.get(id=coach_id)
+        except (jwt.InvalidTokenError, Coach.DoesNotExist):
+            return JsonResponse({'code': 401, 'message': '无效的token或教练不存在'}, status=401)
+        
+        # 验证任务和队伍是否存在
+        try:
+            task = Task.objects.get(id=task_id)
+            team = Team.objects.get(id=team_id)
+        except (Task.DoesNotExist, Team.DoesNotExist):
+            return JsonResponse({
+                'code': 404,
+                'message': '任务或队伍不存在'
+            }, status=404)
+        
+        # 检查教练是否有权限分配任务给该队伍
+        if not (team.head_coach.id == coach_id or team.coaches.filter(id=coach_id).exists()):
+            return JsonResponse({
+                'code': 403,
+                'message': '您不是该队伍的教练，无权分配任务'
+            }, status=403)
+        
+        # 更新任务的队伍关系
+        if action == 'add':
+            task.teams.add(team)
+            message = '任务分配成功'
+        elif action == 'remove':
+            task.teams.remove(team)
+            message = '任务移除成功'
+        else:
+            return JsonResponse({
+                'code': 400,
+                'message': '无效的action参数'
+            }, status=400)
+        
+        return JsonResponse({
+            'code': 200,
+            'message': message,
+            'data': {
+                'task_id': task.id,
+                'team_id': team.id,
+                'task_title': task.title,
+                'team_name': team.name,
+                'teams': [{'id': t.id, 'name': t.name} for t in task.teams.all()]
+            }
+        })
+    
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'code': 400,
+            'message': '无效的请求数据格式'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'code': 500,
+            'message': f'服务器错误: {str(e)}'
+        }, status=500)

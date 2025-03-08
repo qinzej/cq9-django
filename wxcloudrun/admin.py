@@ -8,6 +8,8 @@ from django.contrib import messages
 from django import forms
 import pandas as pd
 from .models import Coach, Parent, Player, School, EnrollmentYear, Team, Task, TaskCompletion, Assessment, AssessmentItem, AssessmentScore, TeamResult
+# Updated import to include AchievementSeries
+from .models import AchievementCategory, AchievementSeries, PersonalAchievement, PlayerAchievement, TeamAchievement
 
 # 设置管理后台标题
 admin.site.site_header = '超群九人后台管理'
@@ -335,9 +337,15 @@ class TeamResultAdmin(admin.ModelAdmin):
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ['title', 'start_date', 'end_date']
-    list_filter = ['start_date']
+    list_display = ['title', 'get_teams', 'period', 'start_date', 'end_date', 'status', 'created_by']
+    list_filter = ['period', 'start_date', 'teams', 'status', 'created_by']
     search_fields = ['title', 'description']
+    filter_horizontal = ['teams']  # 使用filter_horizontal来处理多对多字段
+    
+    def get_teams(self, obj):
+        """显示所有关联的队伍名称"""
+        return ', '.join([team.name for team in obj.teams.all()])
+    get_teams.short_description = '所属队伍'
 
     def has_view_permission(self, request, obj=None):
         return request.user.is_superuser or request.user.is_staff
@@ -355,8 +363,8 @@ class TaskAdmin(admin.ModelAdmin):
 
 @admin.register(TaskCompletion)
 class TaskCompletionAdmin(admin.ModelAdmin):
-    list_display = ['task', 'player', 'completion_date']
-    list_filter = ['completion_date', 'task']
+    list_display = ['task', 'player', 'completion_date', 'verified', 'verified_by']
+    list_filter = ['completion_date', 'verified', 'task']
     search_fields = ['task__title', 'player__name']
 
     def has_view_permission(self, request, obj=None):
@@ -429,4 +437,129 @@ class AssessmentScoreAdmin(admin.ModelAdmin):
         return request.user.is_superuser
 
     def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+@admin.register(AchievementCategory)
+class AchievementCategoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'parent_category', 'display_style', 'icon', 'color', 'achievement_count', 'series_count', 'order', 'is_active']
+    list_editable = ['order', 'is_active', 'display_style']
+    search_fields = ['name', 'description']
+    list_filter = ['is_active', 'parent_category', 'display_style']
+    
+    def achievement_count(self, obj):
+        return obj.get_achievement_count()
+    achievement_count.short_description = '成就数量'
+    
+    def series_count(self, obj):
+        return obj.series.count()
+    series_count.short_description = '系列数量'
+
+@admin.register(AchievementSeries)
+class AchievementSeriesAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category', 'achievement_count', 'is_sequential', 'bonus_points', 'order']
+    list_editable = ['order', 'is_sequential', 'bonus_points']
+    search_fields = ['name', 'description']
+    list_filter = ['category', 'is_sequential']
+    
+    def achievement_count(self, obj):
+        return obj.achievements.count()
+    achievement_count.short_description = '成就数量'
+
+@admin.register(PersonalAchievement)
+class PersonalAchievementAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category', 'series', 'tier', 'points', 'difficulty', 'rarity', 'criteria_type', 'unlock_count', 'unlock_rate', 'is_public']
+    list_filter = ['category', 'series', 'tier', 'difficulty', 'rarity', 'criteria_type', 'is_public']
+    search_fields = ['name', 'description', 'criteria_description']
+    filter_horizontal = ['prerequisites']
+    
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('name', 'description', 'category', 'series', 'points')
+        }),
+        ('阶段设置', {
+            'fields': ('tier', 'sequence', 'prerequisites')
+        }),
+        ('显示设置', {
+            'fields': ('icon', 'badge_image_locked', 'badge_image', 'badge_animation')
+        }),
+        ('成就特性', {
+            'fields': ('difficulty', 'rarity', 'hidden', 'featured', 'is_public')
+        }),
+        ('解锁条件', {
+            'fields': ('criteria_type', 'criteria_value', 'criteria_description', 'unlock_message')
+        }),
+    )
+    
+    def unlock_count(self, obj):
+        return obj.get_unlock_count()
+    unlock_count.short_description = '解锁人数'
+    
+    def unlock_rate(self, obj):
+        return f"{obj.get_unlock_rate()}%"
+    unlock_rate.short_description = '解锁率'
+    
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser or request.user.is_staff
+        
+    def has_add_permission(self, request):
+        return request.user.is_superuser or request.user.is_staff
+        
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or request.user.is_staff
+        
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+@admin.register(PlayerAchievement)
+class PlayerAchievementAdmin(admin.ModelAdmin):
+    list_display = ['player', 'achievement', 'awarded_date', 'awarded_by', 'progress', 'shared']
+    list_filter = ['achievement__category', 'awarded_date', 'awarded_by', 'shared']
+    search_fields = ['player__name', 'achievement__name', 'notes']
+    date_hierarchy = 'awarded_date'
+    raw_id_fields = ['player', 'achievement']
+    actions = ['mark_as_shared']
+    
+    def mark_as_shared(self, request, queryset):
+        queryset.update(shared=True)
+        self.message_user(request, f"{queryset.count()}个成就已标记为已分享")
+    mark_as_shared.short_description = "标记选中成就为已分享"
+    
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser or request.user.is_staff
+        
+    def has_add_permission(self, request):
+        return request.user.is_superuser or request.user.is_staff
+        
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser:
+            return obj.awarded_by == request.user
+        return request.user.is_superuser or request.user.is_staff
+        
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser:
+            return obj.awarded_by == request.user
+        return request.user.is_superuser
+
+@admin.register(TeamAchievement)
+class TeamAchievementAdmin(admin.ModelAdmin):
+    list_display = ['team', 'name', 'category', 'points', 'awarded_date', 'awarded_by']
+    list_filter = ['category', 'awarded_date', 'awarded_by']
+    search_fields = ['team__name', 'name', 'description']
+    date_hierarchy = 'awarded_date'
+    raw_id_fields = ['team']
+    
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser or request.user.is_staff
+        
+    def has_add_permission(self, request):
+        return request.user.is_superuser or request.user.is_staff
+        
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser:
+            return obj.awarded_by == request.user
+        return request.user.is_superuser or request.user.is_staff
+        
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser:
+            return obj.awarded_by == request.user
         return request.user.is_superuser

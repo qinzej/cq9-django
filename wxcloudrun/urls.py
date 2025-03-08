@@ -6,6 +6,8 @@ from . import views
 from . import miniprogram_views
 from . import auth_views
 from . import task_views  # 导入任务视图
+from . import achievement_views  # 导入成就视图
+from . import admin_views  # 导入管理视图
 
 urlpatterns = [
     # 获取主页
@@ -34,4 +36,14 @@ urlpatterns = [
     path('api/player/team_task_stats/', task_views.get_team_task_stats, name='get_team_task_stats'),
     path('api/player/task_history/', task_views.get_player_task_history, name='get_player_task_history'),
     path('api/player/update_task_completion/', task_views.update_task_completion_status, name='update_task_completion_status'),
+    path('api/coach/assign_task/', task_views.assign_task_to_team, name='assign_task_to_team'),
+    
+    # 成就系统管理相关URL
+    # 保留但注释掉成就仪表盘 URL
+    # path('admin/achievement/dashboard/', achievement_views.achievement_dashboard, name='achievement_dashboard'),
+    
+    # 管理员工具API
+    path('api/admin/upload_badge/', admin_views.upload_badge_image, name='upload_badge_image'),
 ]
+
+# 这段代码通常不需要修改，因为Django admin会自动处理注册的模型
