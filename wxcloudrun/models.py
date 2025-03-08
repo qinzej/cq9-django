@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from django.db import models
 from django.contrib.auth.models import User, Group, Permission
 from django.utils import timezone
@@ -132,136 +132,151 @@ class TeamResult(models.Model):
         ordering = ['-competition_date']
 
 # 任务管理模块
+class TaskType(models.Model):
+    """任务类型"""
+    name = models.CharField(max_length=50, verbose_name='类型名称')
+    description = models.TextField(blank=True, null=True, verbose_name='类型描述')
+    icon = models.CharField(max_length=50, blank=True, null=True, verbose_name='图标')
+    color = models.CharField(max_length=20, default='#1890ff', verbose_name='颜色')
+    
+    class Meta:
+        verbose_name = '任务类型'
+        verbose_name_plural = '任务类型'
+
+    def __str__(self):
+        return self.name
+
 class Task(models.Model):
-    PERIOD_CHOICES = (
+    """任务模型"""
+    FREQUENCY_CHOICES = [
+        ('once', '一次性'),
         ('daily', '每日'),
         ('weekly', '每周'),
         ('monthly', '每月'),
-        ('once', '一次性'),
-    )
-    title = models.CharField(max_length=200, verbose_name='任务标题')
+    ]
+    
+    STATUS_CHOICES = [
+        ('active', '进行中'),
+        ('completed', '已结束'),
+        ('expired', '已过期'),
+        ('draft', '草稿'),
+    ]
+    
+    title = models.CharField(max_length=100, verbose_name='任务标题')
     description = models.TextField(verbose_name='任务描述')
-    teams = models.ManyToManyField(Team, related_name='tasks', verbose_name='分配队伍')
-    period = models.CharField(max_length=20, choices=PERIOD_CHOICES, default='once', verbose_name='任务周期')
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, related_name='created_tasks', verbose_name='创建教练')
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='team_tasks', verbose_name='所属队伍')
+    task_type = models.ForeignKey(TaskType, on_delete=models.SET_NULL, null=True, verbose_name='任务类型')
+    frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES, default='once', verbose_name='频率')
     start_date = models.DateField(verbose_name='开始日期')
-    end_date = models.DateField(blank=True, null=True, verbose_name='结束日期')
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name='创建人')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.title
-
+    end_date = models.DateField(null=True, blank=True, verbose_name='结束日期')
+    points = models.IntegerField(default=1, verbose_name='积分值')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active', verbose_name='状态')
+    require_proof = models.BooleanField(default=False, verbose_name='是否需要证明')
+    has_reminder = models.BooleanField(default=False, verbose_name='是否有提醒')
+    reminder_time = models.TimeField(null=True, blank=True, verbose_name='提醒时间')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    
     class Meta:
-        db_table = 'task'
         verbose_name = '任务'
         verbose_name_plural = '任务'
-        ordering = ['-created_at']
-
-# 任务完成记录
-class TaskCompletion(models.Model):
-    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='completions', verbose_name='任务')
-    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='task_completions', verbose_name='队员')
-    completion_date = models.DateField(verbose_name='完成日期')
-    proof = models.ImageField(upload_to='task_proofs/', blank=True, null=True, verbose_name='完成证明')
-    notes = models.TextField(blank=True, verbose_name='备注')
-    verified = models.BooleanField(default=False, verbose_name='是否已验证')
-    verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_tasks', verbose_name='验证人')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
+        
     def __str__(self):
-        return f'{self.player.name} - {self.task.title} - {self.completion_date}'
+        return self.title
+    
+    def get_completion_rate(self):
+        """获取任务完成率"""
+        team_players = self.team.players.count()
+        if team_players == 0:
+            return 0
+            
+        # 获取当天或总体的完成人数
+        if self.frequency == 'once':
+            completed = self.completions.filter(status='completed').values('player').distinct().count()
+        else:
+            # 对于周期性任务，计算当天的完成率
+            today = date.today()
+            completed = self.completions.filter(
+                completion_date=today,
+                status='completed'
+            ).count()
+            
+        return round((completed / team_players) * 100)
+        
+    def get_task_streak(self, player):
+        """获取指定队员的连续完成天数"""
+        if self.frequency == 'once':
+            # 一次性任务没有连续概念
+            completion = self.completions.filter(player=player, status='completed').first()
+            return 1 if completion else 0
+            
+        # 查询队员最近的完成记录，按日期倒序排列
+        completions = self.completions.filter(
+            player=player,
+            status='completed'
+        ).order_by('-completion_date')
+        
+        if not completions:
+            return 0
+            
+        streak = 0
+        last_date = None
+        
+        for completion in completions:
+            current_date = completion.completion_date
+            
+            # 第一次循环，初始化last_date
+            if last_date is None:
+                last_date = current_date
+                streak = 1
+                continue
+                
+            # 检查日期是否连续
+            date_diff = (last_date - current_date).days
+            
+            if self.frequency == 'daily' and date_diff == 1:
+                streak += 1
+            elif self.frequency == 'weekly' and date_diff <= 7 and current_date.weekday() == last_date.weekday():
+                streak += 1
+            elif self.frequency == 'monthly' and current_date.month == (last_date.month - 1) % 12:
+                streak += 1
+            else:
+                break
+                
+            last_date = current_date
+            
+        return streak
+
+class TaskCompletion(models.Model):
+    """任务完成记录"""
+    STATUS_CHOICES = [
+        ('pending', '待审核'),
+        ('completed', '已完成'),
+        ('rejected', '已驳回'),
+    ]
+    
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='completions', verbose_name='关联任务')
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='task_completions', verbose_name='完成队员')
+    completion_date = models.DateField(default=date.today, verbose_name='完成日期')
+    completion_time = models.TimeField(auto_now_add=True, verbose_name='完成时间')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='completed', verbose_name='状态')
+    comment = models.TextField(blank=True, null=True, verbose_name='备注')
+    attachment = models.URLField(blank=True, null=True, verbose_name='附件链接')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 
     class Meta:
-        db_table = 'task_completion'
         verbose_name = '任务完成记录'
         verbose_name_plural = '任务完成记录'
-        ordering = ['-completion_date']
-        unique_together = ['task', 'player', 'completion_date']
-
-# 成就管理模块
-class AchievementCategory(models.Model):
-    name = models.CharField(max_length=50, verbose_name='类别名称')
-    description = models.TextField(blank=True, verbose_name='类别描述')
-    icon = models.ImageField(upload_to='achievement_icons/', blank=True, null=True, verbose_name='类别图标')
-    order = models.IntegerField(default=0, verbose_name='排序')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
+        db_table = 'task_completion'
+        ordering = ['-completion_date', '-completion_time']
+    
     def __str__(self):
-        return self.name
+        return f"{self.player.name} - {self.task.title} - {self.completion_date}"
 
-    class Meta:
-        verbose_name = '成就类别'
-        verbose_name_plural = '成就类别'
-        db_table = 'achievement_category'
-        ordering = ['order']
-
-class PersonalAchievement(models.Model):
-    ACHIEVEMENT_TYPE_CHOICES = (
-        ('manual', '手动发放'),
-        ('task', '任务完成'),
-        ('assessment', '考核成绩'),
-    )
-    name = models.CharField(max_length=100, verbose_name='成就名称')
-    description = models.TextField(blank=True, verbose_name='成就描述')
-    category = models.ForeignKey(AchievementCategory, on_delete=models.PROTECT, verbose_name='成就类别', null=True, blank=True)
-    achievement_type = models.CharField(max_length=20, choices=ACHIEVEMENT_TYPE_CHOICES, default='manual', verbose_name='获取方式')
-    task = models.ForeignKey(Task, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='关联任务')
-    task_count = models.IntegerField(default=0, verbose_name='任务完成次数要求')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        db_table = 'personal_achievement'
-        verbose_name = '个人成就'
-        verbose_name_plural = '个人成就'
-
-class PlayerAchievement(models.Model):
-    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='achievements', verbose_name='队员')
-    achievement = models.ForeignKey(PersonalAchievement, on_delete=models.CASCADE, verbose_name='成就')
-    awarded_date = models.DateField(verbose_name='获得日期')
-    awarded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='颁发人')
-    notes = models.TextField(blank=True, verbose_name='备注')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f'{self.player.name} - {self.achievement.name}'
-
-    class Meta:
-        db_table = 'player_achievement'
-        verbose_name = '队员成就记录'
-        verbose_name_plural = '队员成就记录'
-        ordering = ['-awarded_date']
-        unique_together = ['player', 'achievement']
-
-class TeamAchievement(models.Model):
-    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='achievements', verbose_name='队伍')
-    name = models.CharField(max_length=100, verbose_name='成就名称')
-    description = models.TextField(blank=True, verbose_name='成就描述')
-    competition_name = models.CharField(max_length=200, blank=True, verbose_name='比赛名称')
-    awarded_date = models.DateField(verbose_name='获得日期')
-    awarded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='颁发人')
-    notes = models.TextField(blank=True, verbose_name='备注')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f'{self.team.name} - {self.name}'
-
-    class Meta:
-        db_table = 'team_achievement'
-        verbose_name = '队伍成就'
-        verbose_name_plural = '队伍成就'
-        ordering = ['-awarded_date']
-
-# 考核管理模块
 class Assessment(models.Model):
+    """考核模型"""
     name = models.CharField(max_length=100, verbose_name='考核名称')
     description = models.TextField(blank=True, verbose_name='考核描述')
     teams = models.ManyToManyField(Team, related_name='assessments', verbose_name='参与队伍')

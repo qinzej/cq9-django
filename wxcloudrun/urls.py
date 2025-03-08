@@ -5,6 +5,7 @@ from django.contrib import admin
 from . import views
 from . import miniprogram_views
 from . import auth_views
+from . import task_views  # 导入任务视图
 
 urlpatterns = [
     # 获取主页
@@ -25,4 +26,12 @@ urlpatterns = [
     path('api/parent/bind_player/', miniprogram_views.bind_player, name='bind_player'),
     path('api/parent/unbind_player/', miniprogram_views.unbind_player, name='unbind_player'),
     path('api/auth/verify/', auth_views.verify_token, name='verify_token'),
+    
+    # 任务相关接口
+    path('api/player/tasks/', task_views.get_player_tasks, name='get_player_tasks'),
+    path('api/player/complete_task/', task_views.complete_task, name='complete_task'),
+    path('api/player/task_details/', task_views.get_task_details, name='get_task_details'),
+    path('api/player/team_task_stats/', task_views.get_team_task_stats, name='get_team_task_stats'),
+    path('api/player/task_history/', task_views.get_player_task_history, name='get_player_task_history'),
+    path('api/player/update_task_completion/', task_views.update_task_completion_status, name='update_task_completion_status'),
 ]
