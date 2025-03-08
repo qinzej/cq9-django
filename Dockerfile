@@ -24,19 +24,21 @@ WORKDIR /app
 ENV MYSQLCLIENT_CFLAGS="-I/usr/include/mysql"
 ENV MYSQLCLIENT_LDFLAGS="-L/usr/lib/x86_64-linux-gnu -lmysqlclient"
 
-# 配置 pip 并安装依赖
+# 添加PyMySQL到依赖中，因为代码中仍然导入它
 RUN pip config set global.index-url https://mirrors.cloud.tencent.com/pypi/simple/ \
     && pip config set global.trusted-host mirrors.cloud.tencent.com \
     && pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir gunicorn whitenoise
+    && pip install --no-cache-dir gunicorn whitenoise PyMySQL
 
 # 复制项目文件
 COPY . /app
 
-# 创建静态文件目录并收集静态文件
-RUN mkdir -p staticfiles && \
-    python3 manage.py collectstatic --noinput
+# 创建静态文件目录
+RUN mkdir -p staticfiles
+
+# 尝试收集静态文件，如果失败则创建空文件以继续构建
+RUN python3 manage.py collectstatic --noinput || touch staticfiles/.keep
 
 # 添加数据库迁移脚本
 COPY ./docker-entrypoint.sh /

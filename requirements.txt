@@ -6,9 +6,8 @@ sqlparse==0.4.2
 django-simpleui==2023.12.12
 PyJWT==2.8.0
 Pillow==10.1.0
-mysqlclient  # 保留C扩展版MySQL客户端库
+mysqlclient
 whitenoise
 requests
-# PyMySQL已移除，因为我们使用mysqlclient
-# powerline-status已移除，因为不是Web应用必需依赖
-# 移除重复的pandas和python-jwt
+PyMySQL==1.0.2  # 添加回 PyMySQL，因为代码中导入了它
+django-staticfiles  # 添加 django-staticfiles 包
