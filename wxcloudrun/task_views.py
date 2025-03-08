@@ -576,7 +576,7 @@ def get_team_task_stats(request):
     # 按照任务类型分组 - 修复代码格式混乱
     task_type_stats = {}
     for task_stat in tasks_stats:
-        task_type = task_stat.get('task_type', {}).get('name', '其他')
+        task_type = (task_stat.get('task_type') or {}).get('name', '其他')
         if task_type not in task_type_stats:
             task_type_stats[task_type] = []
         task_type_stats[task_type].append(task_stat)
