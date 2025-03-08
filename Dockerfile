@@ -5,7 +5,7 @@ FROM python:3.10-slim
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# 安装系统依赖
+# 安装系统依赖 - 添加pkg-config
 RUN apt-get update && apt-get install -y \
     gcc \
     python3-dev \
@@ -13,19 +13,23 @@ RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     curl \
     iproute2 \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制 requirements.txt 并设置工作目录
 COPY requirements.txt /app/
 WORKDIR /app
 
+# 配置MySQL客户端编译环境变量
+ENV MYSQLCLIENT_CFLAGS="-I/usr/include/mysql"
+ENV MYSQLCLIENT_LDFLAGS="-L/usr/lib/x86_64-linux-gnu -lmysqlclient"
+
 # 配置 pip 并安装依赖
-# 安装 Python 依赖（添加 whitenoise）
 RUN pip config set global.index-url https://mirrors.cloud.tencent.com/pypi/simple/ \
     && pip config set global.trusted-host mirrors.cloud.tencent.com \
     && pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir gunicorn whitenoise  # 新增 whitenoise
+    && pip install --no-cache-dir gunicorn whitenoise
 
 # 复制项目文件
 COPY . /app

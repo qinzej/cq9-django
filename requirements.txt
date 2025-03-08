@@ -1,15 +1,14 @@
 asgiref==3.4.1
 Django>=3.2,<4.0
 pandas==2.1.4
-powerline-status==2.7
-PyMySQL==1.0.2
 pytz==2021.3
 sqlparse==0.4.2
 django-simpleui==2023.12.12
 PyJWT==2.8.0
 Pillow==10.1.0
-mysqlclient
+mysqlclient  # 保留C扩展版MySQL客户端库
 whitenoise
 requests
-pandas
-python-jwt
+# PyMySQL已移除，因为我们使用mysqlclient
+# powerline-status已移除，因为不是Web应用必需依赖
+# 移除重复的pandas和python-jwt
