@@ -47,6 +47,9 @@ urlpatterns = [
     
     # 管理员工具API
     path('api/admin/upload_badge/', admin_views.upload_badge_image, name='upload_badge_image'),
+
+    # 在urlpatterns列表中添加:
+    path('api/parent/players/', views.get_parent_players, name='get_parent_players'),
 ]
 
 # 这段代码通常不需要修改，因为Django admin会自动处理注册的模型

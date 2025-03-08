@@ -233,8 +233,8 @@ def complete_task(request):
                 'message': '该任务已过期'
             }, status=400)
         
-        # 验证队员是否属于该任务的队伍
-        if not player.teams.filter(id=task.team.id).exists():
+        # 验证队员是否属于该任务的队伍 - 修复语法错误和字段引用
+        if not player.teams.filter(id__in=task.teams.values_list('id', flat=True)).exists():
             return JsonResponse({
                 'code': 403,
                 'message': '该队员不属于任务队伍'
@@ -286,8 +286,10 @@ def complete_task(request):
         # 获取连续完成天数
         streak = task.get_task_streak(player)
         
-        # 获取团队完成情况
-        team_total = task.team.players.count()
+        # 获取团队完成情况 - 修复语法错误和逻辑
+        team = task.teams.filter(players=player).first()
+        team_total = team.players.count() if team else 0
+        
         if team_total > 0:
             if task.period == 'once':
                 completed_count = TaskCompletion.objects.filter(
@@ -347,8 +349,8 @@ def get_task_details(request):
     except Task.DoesNotExist:
         return JsonResponse({'code': 404, 'message': '任务不存在'}, status=404)
     
-    # 验证队员是否属于任务队伍
-    if not player.teams.filter(id=task.team.id).exists():
+    # 验证队员是否属于任务队伍 - 修复语法错误
+    if not player.teams.filter(id__in=task.teams.values_list('id', flat=True)).exists():
         return JsonResponse({'code': 403, 'message': '无权查看此任务详情'}, status=403)
         
     # 获取当前日期
@@ -370,8 +372,12 @@ def get_task_details(request):
     # 获取任务连续完成天数
     streak = task.get_task_streak(player)
     
-    # 获取队伍完成情况
-    team = task.team
+    # 获取队伍完成情况 - 需要修改
+    # 找出与当前队员相关的第一个队伍
+    team = task.teams.filter(players=player).first()
+    if not team:
+        return JsonResponse({'code': 404, 'message': '找不到相关队伍'}, status=404)
+    
     team_members = team.players.all()
     
     # 获取队员完成情况
@@ -397,7 +403,7 @@ def get_task_details(request):
         member_data = {
             'player_id': member.id,
             'player_name': member.name,
-            'avatar_url': member.avatar,
+            'streak': member_streak,
             'jersey_number': member.jersey_number,
             'status': completion.status if completion else 'incomplete',
             'completion_date': completion.completion_date.strftime('%Y-%m-%d') if completion else None,
@@ -410,12 +416,12 @@ def get_task_details(request):
     status_order = {'completed': 0, 'pending': 1, 'incomplete': 2}
     team_completions.sort(key=lambda x: (status_order.get(x['status'], 3), -x['streak']))
     
-    # 任务基本信息
+    # 任务基本信息 - 整理混乱的字段定义
     task_data = {
         'id': task.id,
         'title': task.title,
         'description': task.description,
-        'period': task.period,  # 使用period替代frequency
+        'period': task.period,
         'start_date': task.start_date.strftime('%Y-%m-%d'),
         'end_date': task.end_date.strftime('%Y-%m-%d') if task.end_date else None,
         'points': task.points,
@@ -423,10 +429,10 @@ def get_task_details(request):
         'require_proof': task.require_proof,
         'team_name': team.name,
         'task_type': {
-            'name': task.task_type.name,
-            'icon': task.task_type.icon,
-            'color': task.task_type.color
-        } if task.task_type else None,
+            'name': task.task_type.name if hasattr(task, 'task_type') and task.task_type else None,
+            'icon': task.task_type.icon if hasattr(task, 'task_type') and task.task_type else None,
+            'color': task.task_type.color if hasattr(task, 'task_type') and task.task_type else None
+        } if hasattr(task, 'task_type') and task.task_type else None,
         'player_completion': {
             'status': player_completion.status if player_completion else 'incomplete',
             'completion_date': player_completion.completion_date.strftime('%Y-%m-%d') if player_completion else None,
@@ -464,18 +470,19 @@ def get_team_task_stats(request):
         if not team:
             return JsonResponse({'code': 404, 'message': '队员不属于任何队伍'}, status=404)
         team_id = team.id
-    else:
-        # 验证队员是否属于指定队伍
-        if not player.teams.filter(id=team_id).exists():
-            return JsonResponse({'code': 403, 'message': '无权查看此队伍数据'}, status=403)
-        team = Team.objects.get(id=team_id)
+    
+    # 验证队员是否属于指定队伍
+    if not player.teams.filter(id=team_id).exists():
+        return JsonResponse({'code': 403, 'message': '无权查看此队伍数据'}, status=403)
+    
+    team = Team.objects.get(id=team_id)
     
     # 获取今天的日期
     today = date.today()
     
-    # 获取团队活跃任务
+    # 获取团队活跃任务 - 修复字段引用错误
     active_tasks = Task.objects.filter(
-        team=team, 
+        teams=team,  # 修改: 使用teams替代team
         status='active', 
         start_date__lte=today
     ).filter(
@@ -493,13 +500,15 @@ def get_team_task_stats(request):
         if task.period == 'once':
             completed_count = TaskCompletion.objects.filter(
                 task=task, 
-                verified=True
+                verified=True,
+                player__in=team.players.all()
             ).values('player').distinct().count()
         else:
             completed_count = TaskCompletion.objects.filter(
                 task=task, 
                 verified=True,
-                completion_date=today
+                completion_date=today,
+                player__in=team.players.all()
             ).values('player').distinct().count()
         
         # 计算完成率
@@ -524,12 +533,12 @@ def get_team_task_stats(request):
         streak = task.get_task_streak(player)
         
         # 排名数据 - 按连续完成天数排序
-        player_ranks = [] 
         players = team.players.all()
         player_streaks = [(p, task.get_task_streak(p)) for p in players]
         player_streaks.sort(key=lambda x: x[1], reverse=True)
         
         # 取连续天数前三的队员
+        player_ranks = []
         for i, (p, p_streak) in enumerate(player_streaks[:3], 1):
             player_ranks.append({
                 'rank': i,
@@ -539,7 +548,7 @@ def get_team_task_stats(request):
                 'jersey_number': p.jersey_number,
                 'streak': p_streak
             })
-            
+        
         # 当前任务统计
         task_stat = {
             'task_id': task.id,
@@ -564,9 +573,8 @@ def get_team_task_stats(request):
         
         tasks_stats.append(task_stat)
     
-    # 按照任务类型分组
+    # 按照任务类型分组 - 修复代码格式混乱
     task_type_stats = {}
-    
     for task_stat in tasks_stats:
         task_type = task_stat.get('task_type', {}).get('name', '其他')
         if task_type not in task_type_stats:
@@ -597,8 +605,7 @@ def get_team_task_stats(request):
 @csrf_exempt
 @require_http_methods(["GET"])
 def get_player_task_history(request):
-    """
-    获取某队员在指定日期范围内的任务完成记录
+    """获取某队员在指定日期范围内的任务完成记录
     接收参数:
     - player_id: 玩家ID (必填)
     - start_date: 开始日期 (可选, 默认为7天前)
@@ -608,13 +615,14 @@ def get_player_task_history(request):
     if not player_id:
         return JsonResponse({'code': 400, 'message': '缺少player_id参数'}, status=400)
     
+    # 验证token和获取队员
     player, error_response = verify_token_and_get_player(request, player_id)
     if error_response:
         return error_response
     
-    # 解析日期
     today = date.today()
     default_start = today - timedelta(days=7)
+    
     start_date_str = request.GET.get('start_date', default_start.isoformat())
     end_date_str = request.GET.get('end_date', today.isoformat())
     
@@ -644,8 +652,8 @@ def get_player_task_history(request):
         'code': 200,
         'message': '获取成功',
         'data': {
-            'history': data_list,
-            'player_id': player.id
+            'player_id': player.id,
+            'history': data_list
         }
     })
 
@@ -699,7 +707,6 @@ def update_task_completion_status(request):
 def assign_task_to_team(request):
     """将任务分配给队伍"""
     try:
-        # 解析请求数据
         data = json.loads(request.body)
         task_id = data.get('task_id')
         team_id = data.get('team_id')
@@ -718,12 +725,9 @@ def assign_task_to_team(request):
         
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
-            # 这里可以添加权限检查，例如只允许教练分配任务
             if payload.get('user_type') != 'coach':
                 return JsonResponse({'code': 403, 'message': '无权分配任务'}, status=403)
-            
             coach_id = payload.get('user_id')
-            coach = Coach.objects.get(id=coach_id)
         except (jwt.InvalidTokenError, Coach.DoesNotExist):
             return JsonResponse({'code': 401, 'message': '无效的token或教练不存在'}, status=401)
         
@@ -737,7 +741,6 @@ def assign_task_to_team(request):
                 'message': '任务或队伍不存在'
             }, status=404)
         
-        # 检查教练是否有权限分配任务给该队伍
         if not (team.head_coach.id == coach_id or team.coaches.filter(id=coach_id).exists()):
             return JsonResponse({
                 'code': 403,
@@ -763,12 +766,11 @@ def assign_task_to_team(request):
             'data': {
                 'task_id': task.id,
                 'team_id': team.id,
-                'task_title': task.title,
                 'team_name': team.name,
+                'task_title': task.title,
                 'teams': [{'id': t.id, 'name': t.name} for t in task.teams.all()]
             }
         })
-    
     except json.JSONDecodeError:
         return JsonResponse({'code': 400, 'message': '无效的请求数据格式'}, status=400)
     except Exception as e:
@@ -806,13 +808,13 @@ def debug_player_tasks(request):
         task_count = tasks.count()
         
         # 调试信息
-        debug_info = {   
+        debug_info = {
             'player_name': player.name,
             'team_count': teams.count(),
             'team_ids': team_ids,
             'team_names': list(teams.values_list('name', flat=True)),
-            'task_count': task_count,
             'task_ids': list(tasks.values_list('id', flat=True)),
+            'task_count': task_count,
             'task_titles': list(tasks.values_list('title', flat=True))
         }
         
@@ -821,7 +823,6 @@ def debug_player_tasks(request):
             'message': '调试信息获取成功',
             'data': debug_info
         })
-        
     except Exception as e:
         logger.error(f"调试接口出错: {str(e)}")
         return JsonResponse({
