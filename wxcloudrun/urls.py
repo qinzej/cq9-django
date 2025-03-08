@@ -8,6 +8,7 @@ from . import auth_views
 from . import task_views  # 导入任务视图
 from . import achievement_views  # 导入成就视图
 from . import admin_views  # 导入管理视图
+from . import player_views  # 导入新的player_views模块
 
 urlpatterns = [
     # 获取主页
@@ -50,6 +51,9 @@ urlpatterns = [
 
     # 在urlpatterns列表中添加:
     path('api/parent/players/', views.get_parent_players, name='get_parent_players'),
+    
+    # 队员详情API
+    path('api/player/details/', player_views.get_player_details, name='get_player_details'),
 ]
 
 # 这段代码通常不需要修改，因为Django admin会自动处理注册的模型
