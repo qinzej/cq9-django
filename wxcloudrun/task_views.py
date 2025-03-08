@@ -5,25 +5,43 @@ import json
 import jwt
 from django.utils import timezone
 from datetime import datetime, timedelta, date
-from .models import Task, TaskCompletion, Player, Team
+from .models import Task, TaskCompletion, Player, Team, Coach
 from django.conf import settings
 from django.db.models import Count, Q, Subquery, OuterRef, Exists
+import logging
+
+# 设置日志
+logger = logging.getLogger('log')
 
 def verify_token_and_get_player(request, player_id=None):
     """验证token并获取队员信息"""
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    if not token:
-        return None, JsonResponse({'code': 401, 'message': '未登录'}, status=401)
+    auth_header = request.headers.get('Authorization')
+    logger.info(f"Auth header: {auth_header[:20] if auth_header else 'None'}")
+    
+    if not auth_header or not auth_header.startswith('Bearer '):
+        logger.error(f"无效的token格式: {auth_header}")
+        return None, JsonResponse({'code': 401, 'message': '无效的token格式'}, status=401)
+    
+    token = auth_header.split(' ')[1]
     
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+        # 使用JWT_SECRET_KEY而非SECRET_KEY
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=['HS256'])
+        logger.info(f"Token decoded for user_id: {payload.get('user_id')}, type: {payload.get('user_type')}")
+        
         if payload.get('user_type') != 'parent':
-            raise jwt.InvalidTokenError
+            logger.error(f"用户类型错误: {payload.get('user_type')}")
+            return None, JsonResponse({'code': 401, 'message': '用户类型错误'}, status=401)
+            
         parent_id = payload.get('user_id')
-    except jwt.InvalidTokenError:
+    except jwt.ExpiredSignatureError:
+        logger.error("Token已过期")
+        return None, JsonResponse({'code': 401, 'message': 'token已过期'}, status=401)
+    except jwt.InvalidTokenError as e:
+        logger.error(f"无效的token: {str(e)}")
         return None, JsonResponse({'code': 401, 'message': '无效的token'}, status=401)
     
-    # 如果没有提供player_id，返回None表示只需验证token
+    # 如果没有提供player_id，返回parent_id
     if not player_id:
         return parent_id, None
     
@@ -32,6 +50,7 @@ def verify_token_and_get_player(request, player_id=None):
         player = Player.objects.get(id=player_id, parents__id=parent_id)
         return player, None
     except Player.DoesNotExist:
+        logger.error(f"无权访问队员ID {player_id}")
         return None, JsonResponse({'code': 403, 'message': '无权访问该队员信息'}, status=403)
 
 @csrf_exempt
@@ -39,6 +58,7 @@ def verify_token_and_get_player(request, player_id=None):
 def get_player_tasks(request):
     """获取队员的所有任务"""
     player_id = request.GET.get('player_id')
+    
     if not player_id:
         return JsonResponse({'code': 400, 'message': '缺少player_id参数'}, status=400)
     
@@ -56,7 +76,6 @@ def get_player_tasks(request):
     # 查询这些队伍的所有任务
     tasks = Task.objects.filter(teams__in=teams).distinct()  # 使用distinct避免重复
     
-    # 应用状态筛选
     if status_filter:
         tasks = tasks.filter(status=status_filter)
     else:
@@ -88,7 +107,7 @@ def get_player_tasks(request):
                 completion_date=today
             ).first()
         
-        # 获取团队进度 - 修改为处理多个队伍
+        # 获取团队进度
         team_total = 0
         completed_count = 0
         
@@ -120,19 +139,18 @@ def get_player_tasks(request):
             'id': task.id,
             'title': task.title,
             'description': task.description,
-            'period': task.period,  # 使用period替代frequency
+            'period': task.period,
             'start_date': task.start_date.strftime('%Y-%m-%d'),
             'end_date': task.end_date.strftime('%Y-%m-%d') if task.end_date else None,
             'points': task.points,
             'status': task.status,
             'require_proof': task.require_proof,
-            'team_name': task.team.name,
-            'team_names': [team.name for team in task.teams.all()],  # 返回所有队伍名称
+            'team_names': [team.name for team in task.teams.all()],
             'task_type': {
                 'name': task.task_type.name,
                 'icon': task.task_type.icon,
                 'color': task.task_type.color
-            } if task.task_type else None,
+            } if hasattr(task, 'task_type') and task.task_type else None,
             'player_completion': {
                 'status': 'completed' if task_completion and task_completion.verified else 'pending' if task_completion else 'incomplete',
                 'completion_date': task_completion.completion_date.strftime('%Y-%m-%d') if task_completion else None,
@@ -168,6 +186,10 @@ def get_player_tasks(request):
 @require_http_methods(["POST"])
 def complete_task(request):
     """完成任务打卡"""
+    # 添加调试输出
+    auth_header = request.headers.get('Authorization')
+    print(f"DEBUG - Auth header: {auth_header}")
+    
     try:
         # 解析请求数据
         data = json.loads(request.body)
@@ -186,7 +208,7 @@ def complete_task(request):
         player, error_response = verify_token_and_get_player(request, player_id)
         if error_response:
             return error_response
-            
+        
         # 验证任务是否存在
         try:
             task = Task.objects.get(id=task_id)
@@ -195,14 +217,14 @@ def complete_task(request):
                 'code': 404,
                 'message': '任务不存在'
             }, status=404)
-            
+        
         # 验证任务是否处于活跃状态
         if task.status != 'active':
             return JsonResponse({
                 'code': 400,
                 'message': '该任务已结束或未开始'
             }, status=400)
-            
+        
         # 验证任务是否在有效期内
         today = date.today()
         if task.end_date and task.end_date < today:
@@ -210,14 +232,14 @@ def complete_task(request):
                 'code': 400,
                 'message': '该任务已过期'
             }, status=400)
-            
+        
         # 验证队员是否属于该任务的队伍
         if not player.teams.filter(id=task.team.id).exists():
             return JsonResponse({
                 'code': 403,
                 'message': '该队员不属于任务队伍'
             }, status=403)
-            
+        
         # 检查是否已经完成过该任务
         if task.period == 'once':
             existing_completion = TaskCompletion.objects.filter(
@@ -251,7 +273,7 @@ def complete_task(request):
             status = 'pending'  # 设为待审核状态
         else:
             status = 'completed'  # 直接设为已完成
-            
+        
         # 创建任务完成记录
         completion = TaskCompletion.objects.create(
             task=task,
@@ -299,17 +321,10 @@ def complete_task(request):
                 }
             }
         })
-        
     except json.JSONDecodeError:
-        return JsonResponse({
-            'code': 400,
-            'message': '无效的请求数据格式'
-        }, status=400)
+        return JsonResponse({'code': 400, 'message': '无效的请求数据格式'}, status=400)
     except Exception as e:
-        return JsonResponse({
-            'code': 500,
-            'message': f'服务器错误: {str(e)}'
-        }, status=500)
+        return JsonResponse({'code': 500, 'message': f'服务器错误: {str(e)}'}, status=500)
 
 @csrf_exempt
 @require_http_methods(["GET"])
@@ -319,31 +334,22 @@ def get_task_details(request):
     player_id = request.GET.get('player_id')
     
     if not task_id or not player_id:
-        return JsonResponse({
-            'code': 400,
-            'message': '缺少必要参数'
-        }, status=400)
+        return JsonResponse({'code': 400, 'message': '缺少必要参数'}, status=400)
         
     # 验证token和获取队员
     player, error_response = verify_token_and_get_player(request, player_id)
     if error_response:
         return error_response
-        
+    
     # 获取任务
     try:
         task = Task.objects.get(id=task_id)
     except Task.DoesNotExist:
-        return JsonResponse({
-            'code': 404,
-            'message': '任务不存在'
-        }, status=404)
-        
+        return JsonResponse({'code': 404, 'message': '任务不存在'}, status=404)
+    
     # 验证队员是否属于任务队伍
     if not player.teams.filter(id=task.team.id).exists():
-        return JsonResponse({
-            'code': 403,
-            'message': '无权查看此任务详情'
-        }, status=403)
+        return JsonResponse({'code': 403, 'message': '无权查看此任务详情'}, status=403)
         
     # 获取当前日期
     today = date.today()
@@ -360,7 +366,7 @@ def get_task_details(request):
             player=player,
             completion_date=today
         ).first()
-        
+    
     # 获取任务连续完成天数
     streak = task.get_task_streak(player)
     
@@ -384,7 +390,7 @@ def get_task_details(request):
                 player=member,
                 completion_date=today
             ).first()
-            
+        
         # 获取队员的连续完成天数
         member_streak = task.get_task_streak(member)
         
@@ -445,10 +451,7 @@ def get_team_task_stats(request):
     team_id = request.GET.get('team_id')
     
     if not player_id:
-        return JsonResponse({
-            'code': 400,
-            'message': '缺少player_id参数'
-        }, status=400)
+        return JsonResponse({'code': 400, 'message': '缺少player_id参数'}, status=400)
         
     # 验证token和获取队员
     player, error_response = verify_token_and_get_player(request, player_id)
@@ -459,19 +462,12 @@ def get_team_task_stats(request):
     if not team_id:
         team = player.teams.first()
         if not team:
-            return JsonResponse({
-                'code': 404,
-                'message': '队员不属于任何队伍'
-            }, status=404)
+            return JsonResponse({'code': 404, 'message': '队员不属于任何队伍'}, status=404)
         team_id = team.id
     else:
         # 验证队员是否属于指定队伍
         if not player.teams.filter(id=team_id).exists():
-            return JsonResponse({
-                'code': 403,
-                'message': '无权查看此队伍数据'
-            }, status=403)
-            
+            return JsonResponse({'code': 403, 'message': '无权查看此队伍数据'}, status=403)
         team = Team.objects.get(id=team_id)
     
     # 获取今天的日期
@@ -480,7 +476,7 @@ def get_team_task_stats(request):
     # 获取团队活跃任务
     active_tasks = Task.objects.filter(
         team=team, 
-        status='active',
+        status='active', 
         start_date__lte=today
     ).filter(
         Q(end_date__isnull=True) | Q(end_date__gte=today)
@@ -505,7 +501,7 @@ def get_team_task_stats(request):
                 verified=True,
                 completion_date=today
             ).values('player').distinct().count()
-            
+        
         # 计算完成率
         completion_rate = round((completed_count / team_size) * 100) if team_size > 0 else 0
         
@@ -528,7 +524,7 @@ def get_team_task_stats(request):
         streak = task.get_task_streak(player)
         
         # 排名数据 - 按连续完成天数排序
-        player_ranks = []
+        player_ranks = [] 
         players = team.players.all()
         player_streaks = [(p, task.get_task_streak(p)) for p in players]
         player_streaks.sort(key=lambda x: x[1], reverse=True)
@@ -774,12 +770,61 @@ def assign_task_to_team(request):
         })
     
     except json.JSONDecodeError:
-        return JsonResponse({
-            'code': 400,
-            'message': '无效的请求数据格式'
-        }, status=400)
+        return JsonResponse({'code': 400, 'message': '无效的请求数据格式'}, status=400)
     except Exception as e:
+        return JsonResponse({'code': 500, 'message': f'服务器错误: {str(e)}'}, status=500)
+
+# 在文件末尾添加测试接口
+@csrf_exempt
+@require_http_methods(["GET"])
+def debug_player_tasks(request):
+    """调试接口：获取指定队员的任务数据"""
+    try:
+        player_id = request.GET.get('player_id')
+        
+        if not player_id:
+            return JsonResponse({
+                'code': 400,
+                'message': '缺少player_id参数'
+            })
+            
+        # 查询队员是否存在
+        try:
+            player = Player.objects.get(id=player_id)
+        except Player.DoesNotExist:
+            return JsonResponse({
+                'code': 404,
+                'message': f'找不到ID为{player_id}的队员'
+            })
+        
+        # 获取队员所在的队伍
+        teams = player.teams.all()
+        team_ids = list(teams.values_list('id', flat=True))
+        
+        # 获取分配给这些队伍的任务
+        tasks = Task.objects.filter(teams__in=teams).distinct()
+        task_count = tasks.count()
+        
+        # 调试信息
+        debug_info = {   
+            'player_name': player.name,
+            'team_count': teams.count(),
+            'team_ids': team_ids,
+            'team_names': list(teams.values_list('name', flat=True)),
+            'task_count': task_count,
+            'task_ids': list(tasks.values_list('id', flat=True)),
+            'task_titles': list(tasks.values_list('title', flat=True))
+        }
+        
+        return JsonResponse({
+            'code': 200,
+            'message': '调试信息获取成功',
+            'data': debug_info
+        })
+        
+    except Exception as e:
+        logger.error(f"调试接口出错: {str(e)}")
         return JsonResponse({
             'code': 500,
             'message': f'服务器错误: {str(e)}'
-        }, status=500)
+        })

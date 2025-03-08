@@ -358,7 +358,7 @@ LOGS_DIR = '/data/logs/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # JWT配置
-JWT_SECRET_KEY = SECRET_KEY
+JWT_SECRET_KEY = SECRET_KEY  # 这里应该用生成token时相同的密钥
 
 # 添加成就系统相关配置
 ACHIEVEMENT_SETTINGS = {

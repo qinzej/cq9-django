@@ -38,6 +38,9 @@ urlpatterns = [
     path('api/player/update_task_completion/', task_views.update_task_completion_status, name='update_task_completion_status'),
     path('api/coach/assign_task/', task_views.assign_task_to_team, name='assign_task_to_team'),
     
+    # 添加调试接口
+    path('api/debug/player_tasks/', task_views.debug_player_tasks, name='debug_player_tasks'),
+    
     # 成就系统管理相关URL
     # 保留但注释掉成就仪表盘 URL
     # path('admin/achievement/dashboard/', achievement_views.achievement_dashboard, name='achievement_dashboard'),
