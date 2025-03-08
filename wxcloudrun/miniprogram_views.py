@@ -763,7 +763,9 @@ def update_player(request):
                 'avatar_url': player.avatar
             }
             
-            # 同时更新用户信息中的队员列表
+            # 直接从数据库重新查询所有关联的队员
+            all_players = Player.objects.filter(parents=parent)
+            
             players = [{
                 'id': p.id,
                 'name': p.name,
@@ -771,7 +773,7 @@ def update_player(request):
                 'enrollment_year': p.enrollment_year.year,
                 'jersey_number': p.jersey_number,
                 'avatar_url': p.avatar
-            } for p in parent.players.all()]
+            } for p in all_players]
             
             return JsonResponse({
                 'code': 200,
