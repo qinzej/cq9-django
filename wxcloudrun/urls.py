@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/enrollment-years/', miniprogram_views.get_enrollment_years, name='get_enrollment_years'),
     path('api/parent/search_players/', miniprogram_views.search_players, name='search_players'),
     path('api/parent/add_player/', miniprogram_views.add_player, name='add_player'),
+    path('api/parent/update_player/', miniprogram_views.update_player, name='update_player'),  # 新增更新队员接口
     path('api/parent/bind_player/', miniprogram_views.bind_player, name='bind_player'),
     path('api/parent/unbind_player/', miniprogram_views.unbind_player, name='unbind_player'),
     path('api/auth/verify/', auth_views.verify_token, name='verify_token'),
