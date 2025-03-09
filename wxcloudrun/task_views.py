@@ -214,7 +214,7 @@ def complete_task(request):
         notes = data.get('notes', '')  # 修改为正确的参数名 notes  # 这里应该是 notes，而不是 comment
         attachment = data.get('attachment')
         
-        if not player_id or not task_id:
+        if not player_id or not task_id:  # 修复语法错误：将 "或" 改为 "or"
             return JsonResponse({
                 'code': 400,
                 'message': '缺少必要参数'
@@ -456,7 +456,7 @@ def get_task_details(request):
             'status': 'completed' if player_completion and player_completion.verified else 'pending' if player_completion else 'incomplete',
             'completion_date': player_completion.completion_date.strftime('%Y-%m-%d') if player_completion else None,
             'notes': player_completion.notes if player_completion else None,  # 修正：使用 notes 而不是 comment
-            'attachment': player_completion.attachment if player_completion else None
+            'attachment': player_completion.proof if player_completion else None  # 修改这里：使用 proof 而非 attachment
         },
         'streak': streak,
         'team_completions': team_completions
@@ -664,7 +664,7 @@ def get_player_task_history(request):
             'completion_date': comp.completion_date.strftime('%Y-%m-%d'),
             'status': 'completed' if comp.verified else 'pending',
             'notes': comp.notes,  # 修正：使用 notes 而不是 comment
-            'attachment': comp.attachment
+            'attachment': comp.proof  # 修复语法错误：使用 proof 而不是 attachment
         })
     
     return JsonResponse({
@@ -708,8 +708,8 @@ def update_task_completion_status(request):
     except TaskCompletion.DoesNotExist:
         return JsonResponse({'code': 404, 'message': '任务完成记录不存在'}, status=404)
     
-    # 更新状态
-    completion.status = new_status
+    # 更新状态 - 修改为使用 verified 字段
+    completion.verified = (new_status == 'completed')  # 将 'completed' 或 'rejected' 转换为布尔值
     completion.save()
     
     return JsonResponse({
@@ -717,7 +717,7 @@ def update_task_completion_status(request):
         'message': '更新成功',
         'data': {
             'completion_id': completion.id,
-            'new_status': completion.status
+            'new_status': 'completed' if completion.verified else 'rejected'  # 返回状态字符串以保持API兼容性
         }
     })
 
