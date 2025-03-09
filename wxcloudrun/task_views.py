@@ -175,7 +175,7 @@ def get_player_tasks(request):
                     player=member,
                     completion_date=today if task.period != 'once' else None
                 ).order_by('-completion_date').first()
-                teammate_status = completion_record.status if completion_record else 'incomplete'
+                teammate_status = 'completed' if completion_record and completion_record.verified else 'pending' if completion_record else 'incomplete'
                 team_completions.append({
                     'player_id': member.id,
                     'player_name': member.name,
@@ -424,7 +424,7 @@ def get_task_details(request):
             'player_name': member.name,
             'streak': member_streak,
             'jersey_number': member.jersey_number,
-            'status': completion.status if completion else 'incomplete',
+            'status': 'completed' if completion and completion.verified else 'pending' if completion else 'incomplete',
             'completion_date': completion.completion_date.strftime('%Y-%m-%d') if completion else None,
             'streak': member_streak
         }
@@ -453,7 +453,7 @@ def get_task_details(request):
             'color': task.task_type.color if hasattr(task, 'task_type') and task.task_type else None
         } if hasattr(task, 'task_type') and task.task_type else None,
         'player_completion': {
-            'status': player_completion.status if player_completion else 'incomplete',
+            'status': 'completed' if player_completion and player_completion.verified else 'pending' if player_completion else 'incomplete',
             'completion_date': player_completion.completion_date.strftime('%Y-%m-%d') if player_completion else None,
             'notes': player_completion.notes if player_completion else None,  # 修正：使用 notes 而不是 comment
             'attachment': player_completion.attachment if player_completion else None
@@ -662,7 +662,7 @@ def get_player_task_history(request):
             'task_id': comp.task.id,
             'title': comp.task.title,
             'completion_date': comp.completion_date.strftime('%Y-%m-%d'),
-            'status': comp.status,
+            'status': 'completed' if comp.verified else 'pending',
             'notes': comp.notes,  # 修正：使用 notes 而不是 comment
             'attachment': comp.attachment
         })
