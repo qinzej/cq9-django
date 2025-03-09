@@ -211,7 +211,7 @@ def complete_task(request):
         data = json.loads(request.body)
         player_id = data.get('player_id')
         task_id = data.get('task_id')
-        comment = data.get('comment', '')
+        notes = data.get('notes', '')  # 修改为正确的参数名 notes  # 这里应该是 notes，而不是 comment
         attachment = data.get('attachment')
         
         if not player_id or not task_id:
@@ -286,17 +286,20 @@ def complete_task(request):
         
         # 如果需要证明但没提供
         if task.require_proof and not attachment:
-            status = 'pending'  # 设为待审核状态
+            verified = False  # 设为未验证状态(待审核)
+            status_display = 'pending'  # 仅用于返回的状态显示
         else:
-            status = 'completed'  # 直接设为已完成
+            verified = True  # 直接设为已验证
+            status_display = 'completed'  # 仅用于返回的状态显示
         
-        # 创建任务完成记录
+        # 创建任务完成记录 - 使用模型实际字段
         completion = TaskCompletion.objects.create(
             task=task,
             player=player,
-            comment=comment,
-            attachment=attachment,
-            status=status
+            notes=notes,
+            proof=attachment,
+            verified=verified,  # 使用verified替代status
+            completion_date=today  # 添加完成日期字段，使用当前日期
         )
         
         # 获取连续完成天数
@@ -326,10 +329,10 @@ def complete_task(request):
         
         return JsonResponse({
             'code': 200,
-            'message': '打卡成功' if status == 'completed' else '打卡成功，等待审核',
+            'message': '打卡成功' if verified else '打卡成功，等待审核',
             'data': {
                 'completion_id': completion.id,
-                'status': status,
+                'status': status_display,  # 返回一个状态字符串以保持API兼容性
                 'completion_date': completion.completion_date.strftime('%Y-%m-%d'),
                 'streak': streak,
                 'team_progress': {
@@ -452,7 +455,7 @@ def get_task_details(request):
         'player_completion': {
             'status': player_completion.status if player_completion else 'incomplete',
             'completion_date': player_completion.completion_date.strftime('%Y-%m-%d') if player_completion else None,
-            'comment': player_completion.comment if player_completion else None,
+            'notes': player_completion.notes if player_completion else None,  # 修正：使用 notes 而不是 comment
             'attachment': player_completion.attachment if player_completion else None
         },
         'streak': streak,
@@ -660,7 +663,7 @@ def get_player_task_history(request):
             'title': comp.task.title,
             'completion_date': comp.completion_date.strftime('%Y-%m-%d'),
             'status': comp.status,
-            'comment': comp.comment,
+            'notes': comp.notes,  # 修正：使用 notes 而不是 comment
             'attachment': comp.attachment
         })
     
