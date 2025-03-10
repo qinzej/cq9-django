@@ -28,6 +28,7 @@ urlpatterns = [
     path('api/parent/update_player/', miniprogram_views.update_player, name='update_player'),  # 新增更新队员接口
     path('api/parent/bind_player/', miniprogram_views.bind_player, name='bind_player'),
     path('api/parent/unbind_player/', miniprogram_views.unbind_player, name='unbind_player'),
+    path('api/parent/logout/', miniprogram_views.parent_logout, name='parent_logout'),
     path('api/auth/verify/', auth_views.verify_token, name='verify_token'),
     
     # 任务相关接口

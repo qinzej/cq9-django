@@ -805,3 +805,54 @@ def update_player(request):
             'code': 500,
             'message': f'更新队员信息失败: {str(e)}'
         }, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def parent_logout(request):
+    """家长退出登录的接口"""
+    try:
+        # 验证token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return JsonResponse({
+                'code': 401,
+                'message': '无效的token格式'
+            }, status=401)
+        
+        token = auth_header.split(' ')[1]
+        
+        try:
+            # 解码token - 修改这里使用与其他函数相同的SECRET_KEY
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            
+            # 验证用户类型
+            if payload.get('user_type') != 'parent':
+                return JsonResponse({
+                    'code': 401,
+                    'message': '用户类型错误'
+                }, status=401)
+            
+            # 注意: 由于使用JWT，服务端实际上不需要额外操作来使token失效
+            # JWT的登出主要靠客户端删除存储的token
+            
+            return JsonResponse({
+                'code': 200,
+                'message': '退出成功'
+            })
+            
+        except jwt.ExpiredSignatureError:
+            return JsonResponse({
+                'code': 401,
+                'message': 'token已过期'
+            }, status=401)
+        except jwt.InvalidTokenError:
+            return JsonResponse({
+                'code': 401,
+                'message': '无效的token'
+            }, status=401)
+            
+    except Exception as e:
+        return JsonResponse({
+            'code': 500,
+            'message': f'服务器错误: {str(e)}'
+        }, status=500)
