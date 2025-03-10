@@ -81,9 +81,33 @@ class Player(models.Model):
 
     @property
     def grade(self):
-        current_year = datetime.now().year
-        years_since_enrollment = current_year - self.enrollment_year.year
-        return years_since_enrollment + 1
+        """根据入学年份计算年级，考虑9月1日的学年切换"""
+        if not self.enrollment_year:
+            return None
+            
+        from datetime import datetime, date
+        current_date = datetime.now().date()
+        current_year = current_date.year
+        
+        # 计算当前学年，9月1日为学年分界点
+        # 如果当前日期早于9月1日，则仍然是上一学年
+        if current_date < date(current_year, 9, 1):
+            academic_year = current_year - 1
+        else:
+            academic_year = current_year
+            
+        # 计算年级（当前学年 - 入学年 + 1）
+        grade_number = academic_year - self.enrollment_year.year + 1
+        
+        # 年级展示的中文名称
+        grade_names = {
+            1: '一年级', 2: '二年级', 3: '三年级',
+            4: '四年级', 5: '五年级', 6: '六年级',
+            7: '初一', 8: '初二', 9: '初三',
+            10: '高一', 11: '高二', 12: '高三',
+        }
+        
+        return grade_names.get(grade_number, f'第{grade_number}年')
 
     class Meta:
         db_table = 'player'
